@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenAI } from '@google/genai';
+import { Chat, GoogleGenAI } from '@google/genai';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { PrimaryColumnCannotBeNullableError, Repository } from 'typeorm';
 import { ChatSession } from './entities/ChatSession.entity';
 import { Message } from './entities/Message.entity';
 
@@ -29,26 +29,17 @@ export class AiAgentService {
         //save in database when success
         const chatSession = new ChatSession();
         chatSession.messages = [];
-
         const savedChatSession = await this.chatSessionRepository.save(chatSession);
-        const userMessage = new Message();
-        userMessage.content = prompt;
-        userMessage.sender = "user";
-        userMessage.chatSession = savedChatSession;
 
-        const agentMessage = new Message();
-        agentMessage.sender = "agent";
-        agentMessage.content = response?.text || 'No Response From Gemini';
-        agentMessage.chatSession = savedChatSession;
+        const userMessage = new Message(prompt, "user", savedChatSession);
+        const agentMessage = new Message(response?.text || "No Response From Gemini", 'agent', savedChatSession);
 
-        chatSession.messages.push(
+        savedChatSession.messages.push(
           userMessage,
           agentMessage
         )
-
-        await this.chatSessionRepository.save(chatSession);
-        await this.messageRepository.save(userMessage);
-        await this.messageRepository.save(agentMessage);
+        
+        await this.chatSessionRepository.save(savedChatSession);
 
       }
 

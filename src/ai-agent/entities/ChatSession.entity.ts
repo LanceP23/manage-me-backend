@@ -6,9 +6,10 @@ export class ChatSession{
   @PrimaryGeneratedColumn()
   id: number;
 
-  @OneToMany(() => Message, message => message.chatSession)
+  @OneToMany(() => Message, message => message.chatSession, {cascade: true})
   messages: Message[];
 
   @CreateDateColumn()
   createdAt: Date;
+
 }
