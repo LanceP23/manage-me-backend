@@ -1,20 +1,17 @@
-const trim = (v?: string) => (typeof v === 'string' ? v.trim() : '');
+import { ConfigService } from '@nestjs/config';
 
-const DB_HOST = process.env.DB_HOST ? trim(process.env.DB_HOST) : '127.0.0.1';
-const DB_PORT = process.env.DB_PORT ? parseInt(trim(process.env.DB_PORT), 10) : 5433;
-const DB_USERNAME = process.env.DB_USERNAME ? trim(process.env.DB_USERNAME) : 'postgres';
-const DB_PASSWORD = process.env.DB_PASSWORD ? trim(process.env.DB_PASSWORD) : 'postgres';
-const DB_NAME = process.env.DB_NAME ? trim(process.env.DB_NAME) : 'manage_me_db';
-
-export const DATABASE_CONFIG = {
-  TYPE: 'postgres',
-  HOST: DB_HOST,
-  PORT: DB_PORT,
-  USERNAME: DB_USERNAME,
-  PASSWORD: DB_PASSWORD,
-  DATABASE: DB_NAME,
-  SYNCHRONIZE: trim(process.env.DB_SYNCHRONIZE) === 'true' || false,
-  LOGGING: trim(process.env.DB_LOGGING) === 'true' || false,
-  AUTO_LOAD_ENTITIES: true,
-  SSL: trim(process.env.DB_SSL) === 'true' || false,
-} as const;
+export const getDatabaseConfig = (configService: ConfigService) => ({
+  type: 'postgres' as const,
+  host: configService.get<string>('DB_HOST', '127.0.0.1'),
+  port: configService.get<number>('DB_PORT', 5433),
+  username: configService.get<string>('DB_USERNAME', 'postgres'),
+  password: configService.get<string>('DB_PASSWORD', 'postgres'),
+  database: configService.get<string>('DB_NAME', 'manage_me_db'),
+  synchronize: configService.get<boolean>('DB_SYNCHRONIZE', true),
+  logging: configService.get<boolean>('DB_LOGGING', false),
+  autoLoadEntities: true,
+  ssl: configService.get<boolean>('DB_SSL', false),
+  entities: ['dist/**/*.entity{.ts,.js}'],
+  migrations: ['dist/migrations/**/*{.ts,.js}'],
+  subscribers: ['dist/subscribers/**/*{.ts,.js}'],
+});
