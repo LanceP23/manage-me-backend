@@ -25,6 +25,78 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## PostgreSQL Database Setup
+
+This project uses PostgreSQL as its database. You can run PostgreSQL using Docker for easy setup and development.
+
+### Docker Setup (Recommended)
+
+1. Make sure you have Docker installed and running
+2. Start the PostgreSQL database:
+   ```bash
+   docker compose up -d
+   ```
+   
+   This starts PostgreSQL mapped on host port `5433` (container is `5432`).
+
+3. Connection details (from your host):
+   - Host: `localhost` (or `127.0.0.1`)
+   - Port: `5433`
+   - Username: `postgres`
+   - Password: `postgres`
+   - Database: `manage_me_db`
+   - URL: `postgres://postgres:postgres@localhost:5433/manage_me_db`
+
+4. Connecting from another device on your LAN:
+   - Host: your PC's LAN IP (find with `ipconfig` → IPv4 Address)
+   - Ensure Windows Firewall allows inbound TCP `5433`
+   - Same username/password/database as above
+
+5. Optional: If you add `pgadmin` service later, expose it (e.g. `5050`) and connect to host `postgres` (service name) on port `5432` inside the compose network.
+
+### Manual Setup (Alternative)
+
+If you prefer to use your own PostgreSQL installation:
+
+1. Install PostgreSQL on your machine
+2. Create a database (default name: `manage_me_db`)
+3. Update the `.env` file with your database credentials
+
+### Environment Variables
+
+The following environment variables are used for database configuration:
+
+```env
+# Database Configuration
+DB_HOST=localhost
+DB_PORT=5433
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+DB_NAME=manage_me_db
+DB_SYNCHRONIZE=true
+DB_LOGGING=false
+DB_SSL=false
+```
+
+### Database Commands
+
+- Generate migration: `npm run migration:generate -- src/migrations/MyMigration`
+- Run migrations: `npm run migration:run`
+- Revert migration: `npm run migration:revert`
+
+If you need to bypass a malformed local `.env` during CLI runs:
+```bash
+cmd /c "set NO_DOTENV=true & set DB_HOST=127.0.0.1 & set DB_PORT=5433 & set DB_USERNAME=postgres & set DB_PASSWORD=postgres & set DB_NAME=manage_me_db & npm run migration:run"
+```
+
+## Where the DB connection is initialized (NestJS)
+
+- Runtime (app boot): `src/database/database.module.ts`
+  - Uses `TypeOrmModule.forRoot({...})` with values from `src/config/database.config.ts` to create the TypeORM connection for the Nest app.
+- CLI (migrations): `src/data-source.ts`
+  - Provides the TypeORM `DataSource` for CLI commands like migrations.
+  - We scope entities to `src/**/*.entity.{ts,js}` to avoid importing test files.
+
 ## Project setup
 
 ```bash

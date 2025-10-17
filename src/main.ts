@@ -2,8 +2,12 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { API_CONFIG } from './config/api.config';
+import * as dotenv from 'dotenv';
 
 async function bootstrap() {
+  // Load environment variables
+  dotenv.config();
+  
   const app = await NestFactory.create(AppModule);
 
   // Set global prefix for all routes
