@@ -6,8 +6,15 @@ import { SendPromptDto } from './dto/send-prompt-dto';
 export class AiAgentController {
   constructor(private readonly aiAgentService: AiAgentService) {}
 
-  @Post("/prompt-ai")
+  @Post('/prompt-ai')
   getHello(@Body() sendPromptDto: SendPromptDto): Promise<string> {
+    if (sendPromptDto.chatSessionId) {
+      return this.aiAgentService.promptAiAgent(
+        sendPromptDto.prompt,
+        sendPromptDto.chatSessionId,
+      );
+    }
+
     return this.aiAgentService.promptAiAgent(sendPromptDto.prompt);
   }
 }

@@ -1,9 +1,11 @@
-import {IsString, IsNotEmpty, IsEnum, isEnum} from "class-validator";
+import { IsString, IsNotEmpty, IsEnum, IsOptional } from 'class-validator';
+import { ChatSession } from '../entities/ChatSession.entity';
 
-export class SendPromptDto{
-
+export class SendPromptDto {
   @IsString()
   @IsNotEmpty()
   prompt: string;
-}
 
+  @IsOptional()
+  chatSessionId?: number;
+}
