@@ -5,12 +5,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { PrimaryColumnCannotBeNullableError, Repository } from 'typeorm';
 import { ChatSession } from './entities/ChatSession.entity';
 import { Message } from './entities/Message.entity';
-import { error } from 'console';
+import { AiAgentInterface } from './interfaces/AiAgent.interface';
 
 @Injectable()
 export class AiAgentService {
-  private ai: GoogleGenAI;
-
   constructor(
     @InjectRepository(ChatSession)
     private chatSessionRepository: Repository<ChatSession>,
@@ -21,7 +19,6 @@ export class AiAgentService {
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY is required');
     }
-    this.ai = new GoogleGenAI({});
   }
 
   async createChatSession(): Promise<ChatSession> {
@@ -33,15 +30,20 @@ export class AiAgentService {
 
   async promptAiAgent(
     prompt: string,
+    aiAgentInterface: AiAgentInterface,
     existingChatSessionId?: number,
   ): Promise<string> {
     try {
-      const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: `You are a useful AI assistant. ${prompt}`,
-      });
+      const response = await aiAgentInterface.generateResponse(prompt);
       let chatSession: ChatSession;
-      if (response?.text) {
+
+      if (!aiAgentInterface.validateApiKey()) {
+        return JSON.stringify({
+          status: 200,
+          message: 'No Api key',
+        });
+      }
+      if (response) {
         if (!existingChatSessionId) {
           chatSession = new ChatSession();
           chatSession.messages = [];
@@ -63,7 +65,7 @@ export class AiAgentService {
         // Create and save messages directly using the message repository
         const userMessage = new Message(prompt, 'user', chatSession);
         const agentMessage = new Message(
-          response?.text || 'No Response From Gemini',
+          response || 'No Response From Gemini',
           'agent',
           chatSession,
         );
@@ -71,7 +73,7 @@ export class AiAgentService {
         // Save messages directly instead of through cascade
         await this.messageRepository.save([userMessage, agentMessage]);
       }
-      const text = response?.text || 'No Response from Agent';
+      const text = response || 'No Response from Agent';
       console.log('Gemini response:', text);
       return text;
     } catch (error) {
