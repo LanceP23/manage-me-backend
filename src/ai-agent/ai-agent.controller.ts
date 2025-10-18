@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, HttpStatus } from '@nestjs/common';
 import { AiAgentService } from './ai-agent.service';
 import { SendPromptDto } from './dto/send-prompt-dto';
 import { GoogleGeminiAi } from './entities/GoogleGeminiAi.entity';
@@ -11,18 +11,25 @@ export class AiAgentController {
   ) {}
 
   @Post('/prompt-ai')
-  promptAi(@Body() sendPromptDto: SendPromptDto): Promise<string> {
-    if (sendPromptDto.chatSessionId) {
-      return this.aiAgentService.promptAiAgent(
+  async promptAi(@Body() sendPromptDto: SendPromptDto) {
+    try {
+      const response = await this.aiAgentService.promptAiAgent(
         sendPromptDto.prompt,
         this.googleGemini,
         sendPromptDto.chatSessionId,
       );
-    }
 
-    return this.aiAgentService.promptAiAgent(
-      sendPromptDto.prompt,
-      this.googleGemini,
-    );
+      return {
+        status: 'success',
+        data: response,
+        success: true,
+      };
+    } catch (error) {
+      return {
+        status: 'error',
+        message: error.message || 'An unexpected error occurred',
+        success: false,
+      };
+    }
   }
 }
