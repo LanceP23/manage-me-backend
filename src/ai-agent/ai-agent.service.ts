@@ -6,6 +6,7 @@ import { PrimaryColumnCannotBeNullableError, Repository } from 'typeorm';
 import { ChatSession } from './entities/ChatSession.entity';
 import { Message } from './entities/Message.entity';
 import { AiAgentInterface } from './interfaces/AiAgent.interface';
+import { ChatSessionService } from './chatSession.service';
 
 @Injectable()
 export class AiAgentService {
@@ -13,19 +14,13 @@ export class AiAgentService {
     @InjectRepository(ChatSession)
     private chatSessionRepository: Repository<ChatSession>,
     @InjectRepository(Message) private messageRepository: Repository<Message>,
+    private chatSessionService: ChatSessionService,
     private configService: ConfigService,
   ) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
       throw new Error('GEMINI_API_KEY is required');
     }
-  }
-
-  async createChatSession(): Promise<ChatSession> {
-    const chatSession = new ChatSession();
-    chatSession.messages = [];
-    const savedChatSession = await this.chatSessionRepository.save(chatSession);
-    return savedChatSession;
   }
 
   async promptAiAgent(
@@ -45,20 +40,12 @@ export class AiAgentService {
       }
       if (response) {
         if (!existingChatSessionId) {
-          chatSession = new ChatSession();
-          chatSession.messages = [];
-          chatSession = await this.chatSessionRepository.save(chatSession);
+          chatSession = await this.chatSessionService.createChatSession();
         } else {
-          const existingChatSession = await this.chatSessionRepository.findOne({
-            where: {
-              id: existingChatSessionId,
-            },
-          });
-          if (!existingChatSession) {
-            return JSON.stringify({
-              message: 'Existing Session Not Found',
-            });
-          }
+          const existingChatSession =
+            await this.chatSessionService.findChatSessionById(
+              existingChatSessionId,
+            );
           chatSession = existingChatSession;
         }
 
