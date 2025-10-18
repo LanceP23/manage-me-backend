@@ -17,10 +17,7 @@ export class GoogleGeminiAi implements AiAgentInterface {
     });
 
     if (!response.text) {
-      return JSON.stringify({
-        status: 400,
-        message: 'Generating response from Gemini failed.',
-      });
+      throw new Error('Generating response from Gemini failed.');
     }
 
     return response.text;

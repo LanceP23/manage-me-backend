@@ -33,10 +33,7 @@ export class AiAgentService {
       let chatSession: ChatSession;
 
       if (!aiAgentInterface.validateApiKey()) {
-        return JSON.stringify({
-          status: 200,
-          message: 'No Api key',
-        });
+        throw new Error('No Api Key');
       }
       if (response) {
         if (!existingChatSessionId) {
