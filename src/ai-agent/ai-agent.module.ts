@@ -1,15 +1,12 @@
 import { Module } from '@nestjs/common';
 import { AiAgentController } from './ai-agent.controller';
 import { AiAgentService } from './ai-agent.service';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { ChatSession } from './entities/ChatSession.entity';
-import { Message } from './entities/Message.entity';
 import { GoogleGeminiAi } from './entities/GoogleGeminiAi.entity';
-import { ChatSessionService } from './chatSession.service';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ChatSession, Message])],
+  imports: [ChatModule],
   controllers: [AiAgentController],
-  providers: [AiAgentService, ChatSessionService, GoogleGeminiAi],
+  providers: [AiAgentService, GoogleGeminiAi],
 })
 export class AiAgentModule {}

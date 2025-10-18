@@ -1,27 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Chat, GoogleGenAI } from '@google/genai';
-import { InjectRepository } from '@nestjs/typeorm';
-import { PrimaryColumnCannotBeNullableError, Repository } from 'typeorm';
-import { ChatSession } from './entities/ChatSession.entity';
-import { Message } from './entities/Message.entity';
+import { ChatSession } from '../chat/entities/ChatSession.entity';
 import { AiAgentInterface } from './interfaces/AiAgent.interface';
-import { ChatSessionService } from './chatSession.service';
+import { ChatSessionService } from '../chat/services/chat-session.service';
+import { MessageService } from '../chat/services/message.service';
 
 @Injectable()
 export class AiAgentService {
   constructor(
-    @InjectRepository(ChatSession)
-    private chatSessionRepository: Repository<ChatSession>,
-    @InjectRepository(Message) private messageRepository: Repository<Message>,
     private chatSessionService: ChatSessionService,
+    private messageService: MessageService,
     private configService: ConfigService,
-  ) {
-    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is required');
-    }
-  }
+  ) {}
 
   async promptAiAgent(
     prompt: string,
@@ -46,16 +36,19 @@ export class AiAgentService {
           chatSession = existingChatSession;
         }
 
-        // Create and save messages directly using the message repository
-        const userMessage = new Message(prompt, 'user', chatSession);
-        const agentMessage = new Message(
-          response || 'No Response From Gemini',
-          'agent',
-          chatSession,
-        );
-
-        // Save messages directly instead of through cascade
-        await this.messageRepository.save([userMessage, agentMessage]);
+        // Create and save messages using the message service
+        await this.messageService.createMultipleMessages([
+          {
+            content: prompt,
+            sender: 'user',
+            chatSession: chatSession,
+          },
+          {
+            content: response || 'No Response From Gemini',
+            sender: 'agent',
+            chatSession: chatSession,
+          },
+        ]);
       }
       const text = response || 'No Response from Agent';
       console.log('Gemini response:', text);
