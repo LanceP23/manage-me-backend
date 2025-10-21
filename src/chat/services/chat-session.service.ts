@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ChatSession } from '../entities/ChatSession.entity';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Equal, Repository } from 'typeorm';
 import { MessageService } from './message.service';
 
 @Injectable()
@@ -25,6 +25,25 @@ export class ChatSessionService {
       return savedChatSession;
     } catch (error) {
       throw new Error(`Failed to create chat session: ${error.message}`);
+    }
+  }
+
+  async getAllChatSessions(userId: number): Promise<ChatSession[]> {
+    try {
+      const userChatSessions = await this.chatSessionRepository.find({
+        where: {
+          user: Equal(userId),
+        },
+        relations: ['user'],
+      });
+
+      if (!userChatSessions) {
+        throw new Error('No Chat Session Found');
+      }
+
+      return userChatSessions;
+    } catch (error) {
+      throw Error(error);
     }
   }
 
