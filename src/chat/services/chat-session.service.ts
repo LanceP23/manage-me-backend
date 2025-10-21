@@ -2,12 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { ChatSession } from '../entities/ChatSession.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { MessageService } from './message.service';
 
 @Injectable()
 export class ChatSessionService {
   constructor(
     @InjectRepository(ChatSession)
     private chatSessionRepository: Repository<ChatSession>,
+    private messageService: MessageService,
   ) {}
   async createChatSession(): Promise<ChatSession> {
     try {
@@ -42,5 +44,29 @@ export class ChatSessionService {
     } catch (error) {
       throw Error(error);
     }
+  }
+
+  async getContext(chatSessionId: number): Promise<string> {
+    const messages =
+      await this.messageService.findMessagesByChatSessionId(chatSessionId);
+    return messages.map((msg) => `${msg.sender}: ${msg.content}`).join('\n');
+  }
+
+  async getContextWithAiEnhancement(
+    chatSessionId: number,
+    aiAgent: any,
+  ): Promise<string> {
+    const rawContext = await this.getContext(chatSessionId);
+
+    const prompt = `
+    You are given the full chat history below:
+
+    ${rawContext}
+
+    Using this history, generate a concise and coherent summary or context representation that captures all key details, topics, and intents discussed.
+    The goal is to provide an LLM with enough information to fully understand the conversation so it can continue naturally and accurately.
+    `;
+
+    return aiAgent.generateResponse(prompt);
   }
 }

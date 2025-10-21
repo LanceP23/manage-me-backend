@@ -7,9 +7,11 @@ import { ConfigService } from '@nestjs/config';
 export class GoogleGeminiAi implements AiAgentInterface {
   readonly providerName = 'Gemini';
   private ai: GoogleGenAI;
+
   constructor(private configService: ConfigService) {
     this.ai = new GoogleGenAI({});
   }
+
   async generateResponse(prompt: string): Promise<string> {
     const response = await this.ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -22,6 +24,7 @@ export class GoogleGeminiAi implements AiAgentInterface {
 
     return response.text;
   }
+
   validateApiKey(): boolean {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {

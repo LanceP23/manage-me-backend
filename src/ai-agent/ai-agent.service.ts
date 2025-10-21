@@ -15,27 +15,38 @@ export class AiAgentService {
 
   async promptAiAgent(
     prompt: string,
-    aiAgentInterface: AiAgentInterface,
+    aiAgent: AiAgentInterface,
     existingChatSessionId?: number,
   ): Promise<string> {
     try {
-      const response = await aiAgentInterface.generateResponse(prompt);
       let chatSession: ChatSession;
 
-      if (!aiAgentInterface.validateApiKey()) {
+      if (!existingChatSessionId) {
+        chatSession = await this.chatSessionService.createChatSession();
+      } else {
+        const existingChatSession =
+          await this.chatSessionService.findChatSessionById(
+            existingChatSessionId,
+          );
+        chatSession = existingChatSession;
+      }
+
+      if (!aiAgent.validateApiKey()) {
         throw new Error('No Api Key');
       }
-      if (response) {
-        if (!existingChatSessionId) {
-          chatSession = await this.chatSessionService.createChatSession();
-        } else {
-          const existingChatSession =
-            await this.chatSessionService.findChatSessionById(
-              existingChatSessionId,
-            );
-          chatSession = existingChatSession;
-        }
 
+      const context = await this.chatSessionService.getContextWithAiEnhancement(
+        chatSession.id,
+        aiAgent,
+      );
+      console.log(context);
+      const fullPrompt = context
+        ? `Chat History:\n${context}\n\nCurrent Prompt: ${prompt}`
+        : `You are a useful AI assistant. ${prompt}`;
+
+      const response = await aiAgent.generateResponse(fullPrompt);
+
+      if (response) {
         // Create and save messages using the message service
         await this.messageService.createMultipleMessages([
           {
