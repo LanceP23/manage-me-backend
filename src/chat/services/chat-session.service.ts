@@ -46,7 +46,7 @@ export class ChatSessionService {
     }
   }
 
-  async getContext(chatSessionId: number): Promise<string> {
+  async getChatHistory(chatSessionId: number): Promise<string> {
     const messages =
       await this.messageService.findMessagesByChatSessionId(chatSessionId);
     return messages.map((msg) => `${msg.sender}: ${msg.content}`).join('\n');
@@ -56,7 +56,7 @@ export class ChatSessionService {
     chatSessionId: number,
     aiAgent: any,
   ): Promise<string> {
-    const rawContext = await this.getContext(chatSessionId);
+    const rawContext = await this.getChatHistory(chatSessionId);
 
     const prompt = `
     You are given the full chat history below:
