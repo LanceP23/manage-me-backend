@@ -17,7 +17,7 @@ export class AiAgentService {
     prompt: string,
     aiAgent: AiAgentInterface,
     existingChatSessionId?: number,
-  ): Promise<string> {
+  ): Promise<{ response: string; chatSessionId: number }> {
     try {
       let chatSession: ChatSession;
 
@@ -63,7 +63,10 @@ export class AiAgentService {
       }
       const text = response || 'No Response from Agent';
       console.log('Gemini response:', text);
-      return text;
+      return {
+        response: text,
+        chatSessionId: chatSession.id,
+      };
     } catch (error) {
       console.error('Gemini API Error:', error);
       throw new Error(`Failed to process AI prompt: ${error.message}`);

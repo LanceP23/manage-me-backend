@@ -21,7 +21,10 @@ export class AiAgentController {
 
       return {
         status: 'success',
-        data: response,
+        data: {
+          response: response.response,
+          chatSessionId: response.chatSessionId,
+        },
         success: true,
       };
     } catch (error) {
