@@ -35,16 +35,13 @@ export class AiAgentService {
         throw new Error('No Api Key');
       }
 
-      const context = await this.chatSessionService.getContextWithAiEnhancement(
-        chatSession.id,
-        aiAgent,
-      );
-      console.log(context);
-      const fullPrompt = context
-        ? `Chat History:\n${context}\n\nCurrent Prompt: ${prompt}`
-        : `You are a useful AI assistant. ${prompt}`;
+      aiAgent.context =
+        await this.chatSessionService.getContextWithAiEnhancement(
+          chatSession.id,
+          aiAgent,
+        );
 
-      const response = await aiAgent.generateResponse(fullPrompt);
+      const response = await aiAgent.generateResponse(prompt);
 
       if (response) {
         // Create and save messages using the message service

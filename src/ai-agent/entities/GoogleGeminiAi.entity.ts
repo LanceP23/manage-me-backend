@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class GoogleGeminiAi implements AiAgentInterface {
   readonly providerName = 'Gemini';
+  context: string = 'No Context Built Yet';
   private ai: GoogleGenAI;
 
   constructor(private configService: ConfigService) {
@@ -13,9 +14,13 @@ export class GoogleGeminiAi implements AiAgentInterface {
   }
 
   async generateResponse(prompt: string): Promise<string> {
+    const fullPrompt = this.context
+      ? `Chat History:\n${this.context}\n\nCurrent Prompt: ${prompt}`
+      : `You are a useful AI assistant. ${prompt}`;
+
     const response = await this.ai.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: `You are a useful AI assistant. ${prompt}`,
+      contents: `${fullPrompt}`,
     });
 
     if (!response.text) {
