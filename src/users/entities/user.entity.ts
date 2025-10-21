@@ -1,8 +1,9 @@
-import { Entity, Column, Unique, BeforeInsert, BeforeUpdate } from 'typeorm';
+import { Entity, Column, Unique, BeforeInsert, BeforeUpdate, OneToMany } from 'typeorm';
 import { BaseEntity } from '../../database/base.entity';
 import { IsEmail, IsNotEmpty, MinLength } from 'class-validator';
 import * as bcrypt from 'bcrypt';
 import { Exclude } from 'class-transformer';
+import { ChatSession } from '../../chat/entities/ChatSession.entity';
 
 @Entity('users')
 @Unique(['email'])
@@ -40,4 +41,7 @@ export class User extends BaseEntity {
   async validatePassword(password: string): Promise<boolean> {
     return await bcrypt.compare(password, this.password);
   }
+
+  @OneToMany(() => ChatSession, chatSession => chatSession.user)
+  chatSessions: ChatSession[];
 }
