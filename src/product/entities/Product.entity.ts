@@ -22,7 +22,6 @@ export class Product {
   domain: string;
 
   @OneToOne(() => ProductContext, (productContext) => productContext.product)
-  @JoinColumn() // ✅ Owner side of relation
   productContext: ProductContext;
 
   @CreateDateColumn()

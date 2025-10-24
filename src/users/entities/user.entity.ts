@@ -4,6 +4,7 @@ import { IsEmail, IsNotEmpty, MinLength } from 'class-validator';
 import * as bcrypt from 'bcrypt';
 import { Exclude } from 'class-transformer';
 import { ChatSession } from '../../chat/entities/ChatSession.entity';
+import { Answer } from '../../answer/entities/answer.entity';
 
 @Entity('users')
 @Unique(['email'])
@@ -44,4 +45,7 @@ export class User extends BaseEntity {
 
   @OneToMany(() => ChatSession, chatSession => chatSession.user)
   chatSessions: ChatSession[];
+
+  @OneToMany(() => Answer, answer => answer.user)
+  answers: Answer[];
 }

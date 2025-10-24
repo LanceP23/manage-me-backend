@@ -4,16 +4,23 @@ import { Repository } from 'typeorm';
 import { Product } from './entities/Product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { ProductContextService } from 'src/product-context/services/product-context.service';
+import { AiAgentInterface } from 'src/ai-agent/interfaces/AiAgent.interface';
 
 @Injectable()
 export class ProductService {
   constructor(
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
+    private productContextService: ProductContextService,
   ) {}
 
-  async create(createProductDto: CreateProductDto): Promise<Product> {
+  async create(
+    createProductDto: CreateProductDto,
+    aiAgent: AiAgentInterface,
+  ): Promise<Product> {
     const product = this.productRepository.create(createProductDto);
+    this.productContextService.createProductContext(product, aiAgent);
     return this.productRepository.save(product);
   }
 

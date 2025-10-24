@@ -13,14 +13,18 @@ import {
 import { ProductService } from './product.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { GoogleGeminiAi } from '../ai-agent/entities/GoogleGeminiAi.entity';
 
 @Controller('product')
 export class ProductController {
-  constructor(private readonly productService: ProductService) {}
+  constructor(
+    private readonly productService: ProductService,
+    private readonly googleGemini: GoogleGeminiAi,
+  ) {}
 
   @Post()
   create(@Body() createProductDto: CreateProductDto) {
-    return this.productService.create(createProductDto);
+    return this.productService.create(createProductDto, this.googleGemini);
   }
 
   @Get()
