@@ -10,7 +10,10 @@ export const getDatabaseConfig = (configService: ConfigService) => ({
   synchronize: configService.get<boolean>('DB_SYNCHRONIZE', true),
   logging: configService.get<boolean>('DB_LOGGING', false),
   autoLoadEntities: true,
-  ssl: configService.get<boolean>('DB_SSL', false),
+  ssl: false, 
+  extra: {
+    ssl: false,
+  },
   entities: ['dist/**/*.entity{.ts,.js}'],
   migrations: ['dist/migrations/**/*{.ts,.js}'],
   subscribers: ['dist/subscribers/**/*{.ts,.js}'],

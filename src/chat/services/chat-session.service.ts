@@ -11,12 +11,12 @@ export class ChatSessionService {
     private chatSessionRepository: Repository<ChatSession>,
     private messageService: MessageService,
   ) {}
+
   async createChatSession(): Promise<ChatSession> {
     try {
       const chatSession = new ChatSession();
       chatSession.messages = [];
-      const savedChatSession =
-        await this.chatSessionRepository.save(chatSession);
+      const savedChatSession = await this.chatSessionRepository.save(chatSession);
 
       if (!savedChatSession) {
         throw new Error('Failed to create chat session');
@@ -53,6 +53,7 @@ export class ChatSessionService {
         where: {
           id: id,
         },
+        relations: ['user'], // Load the user relation to check ownership
       });
 
       if (!existingChatSession) {
@@ -66,8 +67,7 @@ export class ChatSessionService {
   }
 
   async getChatHistory(chatSessionId: number): Promise<string> {
-    const messages =
-      await this.messageService.findMessagesByChatSessionId(chatSessionId);
+    const messages = await this.messageService.findMessagesByChatSessionId(chatSessionId);
     return messages.map((msg) => `${msg.sender}: ${msg.content}`).join('\n');
   }
 

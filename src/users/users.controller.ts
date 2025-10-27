@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, HttpStatus, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, HttpStatus, HttpCode, BadRequestException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dtos/create-user.dto';
@@ -13,7 +13,11 @@ export class UsersController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() createUserDto: CreateUserDto): Promise<User> {
-    return await this.usersService.create(createUserDto);
+    try {
+      return await this.usersService.create(createUserDto);
+    } catch (error) {
+      throw new BadRequestException(error.message || 'Failed to create user');
+    }
   }
 
   @Get()
@@ -31,7 +35,11 @@ export class UsersController {
     @Param('id') id: string,
     @Body() updateUserDto: Partial<User>,
   ): Promise<User | null> {
-    return await this.usersService.update(id, updateUserDto);
+    try {
+      return await this.usersService.update(id, updateUserDto);
+    } catch (error) {
+      throw new BadRequestException(error.message || 'Failed to update user');
+    }
   }
 
   @Delete(':id')

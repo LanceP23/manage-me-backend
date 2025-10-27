@@ -10,13 +10,14 @@ import { ProductContextModule } from './product-context/product-context.module';
 import { ProductModule } from './product/product.module';
 import { ProductQuestionModule } from './product-question/product-question.module';
 import { AnswerModule } from './answer/answer.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true, // Makes ConfigService available globally
     }),
-     AiAgentModule,
+    AiAgentModule,
     DatabaseModule,
     UsersModule,
     AuthModule,
@@ -24,6 +25,7 @@ import { AnswerModule } from './answer/answer.module';
     ProductModule,
     ProductQuestionModule,
     AnswerModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
