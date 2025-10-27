@@ -17,12 +17,13 @@ export class AiAgentService {
     prompt: string,
     aiAgent: AiAgentInterface,
     existingChatSessionId?: number,
+    user?: any, 
   ): Promise<{ response: string; chatSessionId: number }> {
     try {
       let chatSession: ChatSession;
 
       if (!existingChatSessionId) {
-        chatSession = await this.chatSessionService.createChatSession();
+        chatSession = await this.chatSessionService.createChatSession(user);
       } else {
         const existingChatSession =
           await this.chatSessionService.findChatSessionById(

@@ -3,19 +3,32 @@ import { ChatSession } from '../entities/ChatSession.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Equal, Repository } from 'typeorm';
 import { MessageService } from './message.service';
+import { User } from '../../users/entities/user.entity';
 
 @Injectable()
 export class ChatSessionService {
   constructor(
     @InjectRepository(ChatSession)
     private chatSessionRepository: Repository<ChatSession>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
     private messageService: MessageService,
   ) {}
 
-  async createChatSession(): Promise<ChatSession> {
+  async createChatSession(user?: any): Promise<ChatSession> {
     try {
       const chatSession = new ChatSession();
       chatSession.messages = [];
+      
+      // If a user is provided, associate the chat session with the user
+      if (user && user.userId) {
+        // Fetch the full user entity from the database
+        const fullUser = await this.userRepository.findOneBy({ id: user.userId });
+        if (fullUser) {
+          chatSession.user = fullUser;
+        }
+      }
+      
       const savedChatSession = await this.chatSessionRepository.save(chatSession);
 
       if (!savedChatSession) {

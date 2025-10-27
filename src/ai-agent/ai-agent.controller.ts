@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpStatus, UseGuards, Request } from '@nestjs/common';
 import { AiAgentService } from './ai-agent.service';
 import { SendPromptDto } from './dto/send-prompt-dto';
 import { GoogleGeminiAi } from './entities/GoogleGeminiAi.entity';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller()
+@UseGuards(JwtAuthGuard)
 export class AiAgentController {
   constructor(
     private readonly aiAgentService: AiAgentService,
@@ -11,12 +13,16 @@ export class AiAgentController {
   ) {}
 
   @Post('/prompt-ai')
-  async promptAi(@Body() sendPromptDto: SendPromptDto) {
+  async promptAi(@Body() sendPromptDto: SendPromptDto, @Request() req) {
     try {
+      // Pass the authenticated user to the service
+      const user = req.user;
+      
       const response = await this.aiAgentService.promptAiAgent(
         sendPromptDto.prompt,
         this.googleGemini,
         sendPromptDto.chatSessionId,
+        user, // Pass user to associate with chat session
       );
 
       return {
