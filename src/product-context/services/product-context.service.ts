@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 import { Product } from 'src/product/entities/Product.entity';
 import { AiAgentInterface } from 'src/ai-agent/interfaces/AiAgent.interface';
 import { ProductQuestion } from 'src/product-question/entities/product-question.entity';
+import { GENERATE_QUESTIONS_PROMPTS } from '../constants/prompts.constant';
 
 @Injectable()
 export class ProductContextService {
@@ -37,36 +38,10 @@ export class ProductContextService {
     // First save the product context to establish the product relationship
     await this.productContextRepository.save(productContext);
 
-    const prompt = `
-Give me 10 questions that, if answered, will give you the needed context to generate project management tickets with just a short description of a bug or a feature.
-Return the result as a valid JSON array with the following structure:
-
-[
-  {
-    "id": 1,
-    "question": "string"
-  }
-]
-
-Only return JSON — no extra text.
-`;
-
+    const prompt = GENERATE_QUESTIONS_PROMPTS.PROMPT_1;
     const response = await aiAgent.generateResponse(prompt);
 
-    let questionsJson: { id: number; question: string }[] = [];
-    try {
-      // Some LLMs wrap JSON in code blocks or have stray text
-      const cleanResponse = response
-        .trim()
-        .replace(/```(json)?/g, '')
-        .replace(/```/g, '');
-
-      questionsJson = JSON.parse(cleanResponse);
-    } catch (error) {
-      console.error('❌ Failed to parse AI response:', error);
-      console.error('Response content:', response);
-      throw new Error('Invalid AI response format');
-    }
+    let questionsJson = await this.parseResponseToJson(response);
 
     const productQuestions = questionsJson.map((q) => {
       const pq = new ProductQuestion();
@@ -89,5 +64,25 @@ Only return JSON — no extra text.
         createdAt: pq.createdAt,
       })),
     };
+  }
+
+  async parseResponseToJson(
+    response: string,
+  ): Promise<{ id: number; question: string }[]> {
+    let questionsJson: { id: number; question: string }[] = [];
+    try {
+      // Some LLMs wrap JSON in code blocks or have stray text
+      const cleanResponse = response
+        .trim()
+        .replace(/```(json)?/g, '')
+        .replace(/```/g, '');
+
+      questionsJson = JSON.parse(cleanResponse);
+    } catch (error) {
+      console.error('❌ Failed to parse AI response:', error);
+      console.error('Response content:', response);
+      throw new Error('Invalid AI response format');
+    }
+    return questionsJson;
   }
 }
