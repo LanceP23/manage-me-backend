@@ -21,13 +21,11 @@ export class ProductContextService {
     let productContext: ProductContext;
 
     if (product.productContext) {
-      // ✅ If the product already has a context, fetch it
       productContext = await this.productContextRepository.findOneOrFail({
         where: { id: product.productContext.id },
         relations: ['productQuestions', 'answers'],
       });
     } else {
-      // ✅ Otherwise, create a new context for this product
       productContext = this.productContextRepository.create({
         product,
       });
