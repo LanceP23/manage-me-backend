@@ -22,11 +22,19 @@ export class Answer {
   createdAt: Date;
 
   @ManyToOne(() => ProductContext, (productContext) => productContext.answers)
+  @JoinColumn()
   productContext: ProductContext;
 
-  @ManyToOne(() => ProductQuestion, (productQuestion) => productQuestion.answers, { nullable: true })
-  productQuestion?: ProductQuestion;
+  @ManyToOne(
+    () => ProductQuestion,
+    (productQuestion) => productQuestion.answers,
+    { nullable: true },
+  )
+  @JoinColumn()
+  productQuestion: ProductQuestion;
 
   @ManyToOne(() => User, (user) => user.answers)
+  @JoinColumn()
   user: User;
 }
+

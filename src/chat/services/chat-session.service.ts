@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, forwardRef, Inject } from '@nestjs/common';
 import { ChatSession } from '../entities/ChatSession.entity';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Equal, Repository } from 'typeorm';
 import { MessageService } from './message.service';
 import { User } from '../../users/entities/user.entity';
+import { ProductContextService } from 'src/product-context/services/product-context.service';
 
 @Injectable()
 export class ChatSessionService {
@@ -13,23 +14,28 @@ export class ChatSessionService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private messageService: MessageService,
+    @Inject(forwardRef(() => ProductContextService))
+    private productContext: ProductContextService,
   ) {}
 
   async createChatSession(user?: any): Promise<ChatSession> {
     try {
       const chatSession = new ChatSession();
       chatSession.messages = [];
-      
+
       // If a user is provided, associate the chat session with the user
       if (user && user.userId) {
         // Fetch the full user entity from the database
-        const fullUser = await this.userRepository.findOneBy({ id: user.userId });
+        const fullUser = await this.userRepository.findOneBy({
+          id: user.userId,
+        });
         if (fullUser) {
           chatSession.user = fullUser;
         }
       }
-      
-      const savedChatSession = await this.chatSessionRepository.save(chatSession);
+
+      const savedChatSession =
+        await this.chatSessionRepository.save(chatSession);
 
       if (!savedChatSession) {
         throw new Error('Failed to create chat session');
@@ -80,7 +86,8 @@ export class ChatSessionService {
   }
 
   async getChatHistory(chatSessionId: number): Promise<string> {
-    const messages = await this.messageService.findMessagesByChatSessionId(chatSessionId);
+    const messages =
+      await this.messageService.findMessagesByChatSessionId(chatSessionId);
     return messages.map((msg) => `${msg.sender}: ${msg.content}`).join('\n');
   }
 
@@ -89,6 +96,7 @@ export class ChatSessionService {
     aiAgent: any,
   ): Promise<string> {
     const rawContext = await this.getChatHistory(chatSessionId);
+    const additionalContext = this.productContext.parseResponseToJson;
 
     const prompt = `
     You are given the full chat history below:
@@ -102,3 +110,4 @@ export class ChatSessionService {
     return aiAgent.generateResponse(prompt);
   }
 }
+

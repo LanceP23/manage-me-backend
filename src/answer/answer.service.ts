@@ -4,17 +4,71 @@ import { Repository } from 'typeorm';
 import { Answer } from './entities/answer.entity';
 import { CreateAnswerDto } from './dto/create-answer.dto';
 import { UpdateAnswerDto } from './dto/update-answer.dto';
+import { ProductContext } from 'src/product-context/entities/ProductContext.entity';
+import { ProductQuestion } from 'src/product-question/entities/product-question.entity';
+import { User } from 'src/users/entities/user.entity';
 
 @Injectable()
 export class AnswerService {
   constructor(
     @InjectRepository(Answer)
     private answerRepository: Repository<Answer>,
+    @InjectRepository(ProductContext)
+    private productContextRepository: Repository<ProductContext>,
+    @InjectRepository(ProductQuestion)
+    private productQuestionRepository: Repository<ProductQuestion>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
   ) {}
 
   async create(createAnswerDto: CreateAnswerDto): Promise<Answer> {
-    const answer = this.answerRepository.create(createAnswerDto);
-    return this.answerRepository.save(answer);
+    // Fetch the related entities
+    const productContext = await this.productContextRepository.findOneBy({
+      id: createAnswerDto.productContextId,
+    });
+
+    if (!productContext) {
+      throw new NotFoundException(
+        `ProductContext with ID ${createAnswerDto.productContextId} not found`,
+      );
+    }
+
+    const user = await this.userRepository.findOneBy({
+      id: createAnswerDto.userId,
+    });
+
+    if (!user) {
+      throw new NotFoundException(
+        `User with ID ${createAnswerDto.userId} not found`,
+      );
+    }
+
+    let productQuestion: ProductQuestion | null = null;
+    if (createAnswerDto.productQuestionId) {
+      productQuestion = await this.productQuestionRepository.findOneBy({
+        id: createAnswerDto.productQuestionId,
+      });
+
+      if (!productQuestion) {
+        throw new NotFoundException(
+          `ProductQuestion with ID ${createAnswerDto.productQuestionId} not found`,
+        );
+      }
+    } else {
+      throw new Error('Question Id is needed');
+    }
+
+    if (!productQuestion || !productContext || !user)
+      throw new Error('Question Id is needed');
+    // Create the answer with proper relations
+    const answer = this.answerRepository.create({
+      answerText: createAnswerDto.answerText,
+      productContext,
+      productQuestion,
+      user,
+    });
+
+    return await this.answerRepository.save(answer);
   }
 
   async findAll(): Promise<Answer[]> {
@@ -39,7 +93,9 @@ export class AnswerService {
     await this.answerRepository.update(id, updateAnswerDto);
     const updatedAnswer = await this.findOne(id);
     if (!updatedAnswer) {
-      throw new NotFoundException(`Answer with ID ${id} not found after update`);
+      throw new NotFoundException(
+        `Answer with ID ${id} not found after update`,
+      );
     }
     return updatedAnswer;
   }

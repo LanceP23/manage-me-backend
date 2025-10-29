@@ -1,7 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ProductContextController } from './product-context.controller';
 import { ProductContextService } from './services/product-context.service';
-import { ChatModule } from 'src/chat/chat.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProductContext } from './entities/ProductContext.entity';
 import { ProductQuestion } from 'src/product-question/entities/product-question.entity';
@@ -13,7 +12,6 @@ import { GoogleGeminiAi } from 'src/ai-agent/entities/GoogleGeminiAi.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([ProductContext, ProductQuestion, Answer]),
-    ChatModule,
     ProductQuestionModule,
     forwardRef(() => ProductModule),
   ],

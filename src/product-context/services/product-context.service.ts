@@ -66,6 +66,19 @@ export class ProductContextService {
     };
   }
 
+  async getQuestionsWithAnswersByProductId(
+    productId: number,
+  ): Promise<ProductContext> {
+    const productContext = await this.productContextRepository.findOneOrFail({
+      where: {
+        product: { id: productId },
+      },
+      relations: ['product', 'productQuestions', 'answers'],
+    });
+
+    return productContext;
+  }
+
   async parseResponseToJson(
     response: string,
   ): Promise<{ id: number; question: string }[]> {

@@ -4,6 +4,7 @@ import {
   Body,
   Param,
   ParseIntPipe,
+  Get,
 } from '@nestjs/common';
 import { CreateContextDto } from './dto/create-context.dto';
 import { ProductContextService } from './services/product-context.service';
@@ -36,5 +37,20 @@ export class ProductContextController {
         this.aiAgent,
       );
     return { message: 'created successfully', productContext };
+  }
+
+  @Get('q&a/:id')
+  async getQuestionsWithAnswersByProductId(
+    @Param('id', ParseIntPipe) productId: number,
+  ) {
+    const productContext =
+      await this.productContextService.getQuestionsWithAnswersByProductId(
+        productId,
+      );
+
+    return {
+      message: 'Product Context fetched successfully',
+      productContext,
+    };
   }
 }

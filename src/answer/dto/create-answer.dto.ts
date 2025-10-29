@@ -1,4 +1,10 @@
-import { IsString, IsNumber, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsUUID,
+  isString,
+} from 'class-validator';
 
 export class CreateAnswerDto {
   @IsString()
@@ -11,6 +17,6 @@ export class CreateAnswerDto {
   @IsNumber()
   productQuestionId?: number;
 
-  @IsNumber()
-  userId: number;
+  @IsUUID()
+  userId: string;
 }
