@@ -11,11 +11,17 @@ import { ProductModule } from './product/product.module';
 import { ProductQuestionModule } from './product-question/product-question.module';
 import { AnswerModule } from './answer/answer.module';
 import { ChatModule } from './chat/chat.module';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true, // Makes ConfigService available globally
+    }),
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'uploads'),
+      serveRoot: '/uploads',
     }),
     AiAgentModule,
     DatabaseModule,
@@ -31,3 +37,4 @@ import { ChatModule } from './chat/chat.module';
   providers: [AppService],
 })
 export class AppModule {}
+

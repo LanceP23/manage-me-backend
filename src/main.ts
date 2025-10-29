@@ -1,6 +1,10 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe, VersioningType, ClassSerializerInterceptor } from '@nestjs/common';
+import {
+  ValidationPipe,
+  VersioningType,
+  ClassSerializerInterceptor,
+} from '@nestjs/common';
 import { API_CONFIG } from './config/api.config';
 import * as dotenv from 'dotenv';
 import { Reflector } from '@nestjs/core';
@@ -8,7 +12,7 @@ import { Reflector } from '@nestjs/core';
 async function bootstrap() {
   // Load environment variables
   dotenv.config();
-  
+
   const app = await NestFactory.create(AppModule);
 
   // Set global prefix for all routes
@@ -38,3 +42,4 @@ async function bootstrap() {
   console.log(`API Base URL: /${API_CONFIG.PREFIX}/v${API_CONFIG.VERSION}`);
 }
 bootstrap();
+
