@@ -25,7 +25,9 @@ export class ProductContext {
   @OneToMany(() => Answer, (answer) => answer.productContext)
   answers: Answer[];
 
-  // ✅ Back reference to Product
+  @Column('text', { array: true, nullable: true })
+  images: string[];
+
   @OneToOne(() => Product, (product) => product.productContext)
   @JoinColumn()
   product: Product;

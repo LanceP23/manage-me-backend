@@ -7,6 +7,7 @@ import { Product } from 'src/product/entities/Product.entity';
 import { AiAgentInterface } from 'src/ai-agent/interfaces/AiAgent.interface';
 import { ProductQuestion } from 'src/product-question/entities/product-question.entity';
 import { GENERATE_QUESTIONS_PROMPTS } from '../constants/prompts.constant';
+import { NotFoundException } from '@nestjs/common';
 
 @Injectable()
 export class ProductContextService {
@@ -95,5 +96,27 @@ export class ProductContextService {
       throw new Error('Invalid AI response format');
     }
     return questionsJson;
+  }
+
+  async addImage(productId: number, imagePath: string) {
+    const productContext = await this.productContextRepository.findOne({
+      where: {
+        product: { id: productId },
+      },
+      relations: ['product'],
+    });
+
+    if (!productContext) {
+      throw new NotFoundException(
+        `ProductContext not found for product ${productId}`,
+      );
+    }
+
+    // If images array doesn’t exist yet, create it
+    productContext.images = productContext.images
+      ? [...productContext.images, imagePath]
+      : [imagePath];
+
+    return this.productContextRepository.save(productContext);
   }
 }
