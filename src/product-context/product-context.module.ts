@@ -5,13 +5,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ProductContext } from './entities/ProductContext.entity';
 import { ProductQuestion } from 'src/product-question/entities/product-question.entity';
 import { Answer } from 'src/answer/entities/answer.entity';
+import { Ticket } from 'src/ticket/entities/ticket.entity';
 import { ProductQuestionModule } from 'src/product-question/product-question.module';
 import { ProductModule } from 'src/product/product.module';
 import { GoogleGeminiAi } from 'src/ai-agent/entities/GoogleGeminiAi.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ProductContext, ProductQuestion, Answer]),
+    TypeOrmModule.forFeature([ProductContext, ProductQuestion, Answer, Ticket]),
     ProductQuestionModule,
     forwardRef(() => ProductModule),
   ],

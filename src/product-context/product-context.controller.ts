@@ -92,4 +92,41 @@ export class ProductContextController {
       productContext: productContext,
     };
   }
+
+  @Post('analyze/product/:id')
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: diskStorage({
+        destination: './uploads',
+        filename: (req, file, cb) => {
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
+          cb(
+            null,
+            `${file.fieldname}-${uniqueSuffix}${extname(file.originalname)}`,
+          );
+        },
+      }),
+    }),
+  )
+  async analyzeImageAndGenerateTickets(
+    @UploadedFile() file: Express.Multer.File,
+    @Param('id', ParseIntPipe) productId: number,
+  ) {
+    if (!file) {
+      throw new Error('No file uploaded');
+    }
+    
+    const filePath = file.path;
+
+    await this.productContextService.addImage(productId, filePath);
+
+    const result = await this.productContextService.analyzeImageAndGenerateTickets(
+      productId,
+      filePath,
+      this.aiAgent,
+    );
+
+    return result;
+  }
 }

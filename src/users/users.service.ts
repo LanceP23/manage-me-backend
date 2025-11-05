@@ -38,16 +38,20 @@ export class UsersService {
   }
 
   async update(id: string, updateUserDto: Partial<User>): Promise<User | null> {
-    try {
-      await this.usersRepository.update(id, updateUserDto);
-      return await this.usersRepository.findOneBy({ id });
-    } catch (error) {
-      // Handle duplicate email error for updates
-      if (error instanceof QueryFailedError && error.driverError.code === '23505') {
-        throw new Error('A user with this email already exists');
+    const hasUpdates = Object.keys(updateUserDto).length > 0;
+    
+    if (hasUpdates) {
+      try {
+        await this.usersRepository.update(id, updateUserDto);
+      } catch (error) {
+        if (error instanceof QueryFailedError && error.driverError.code === '23505') {
+          throw new Error('A user with this email already exists');
+        }
+        throw error;
       }
-      throw error;
     }
+    
+    return await this.usersRepository.findOneBy({ id });
   }
 
   async remove(id: string): Promise<void> {

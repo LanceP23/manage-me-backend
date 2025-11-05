@@ -46,7 +46,13 @@ export class ProductService {
       throw new NotFoundException(`Product with ID ${id} not found`);
     }
 
-    await this.productRepository.update(id, updateProductDto);
+    // Check if any updates are provided
+    const hasUpdates = Object.keys(updateProductDto).length > 0;
+    
+    if (hasUpdates) {
+      await this.productRepository.update(id, updateProductDto);
+    }
+    
     const updatedProduct = await this.findOne(id);
     if (!updatedProduct) {
       throw new NotFoundException(

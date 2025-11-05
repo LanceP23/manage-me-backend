@@ -30,6 +30,11 @@ export class GoogleGeminiAi implements AiAgentInterface {
     return response.text;
   }
 
+  async generateResponseWithImage(prompt: string, imagePath: string): Promise<string> {
+    const imagePrompt = `Analyze the image at path: ${imagePath}\n\n${prompt}`;
+    return await this.generateResponse(imagePrompt);
+  }
+
   validateApiKey(): boolean {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {

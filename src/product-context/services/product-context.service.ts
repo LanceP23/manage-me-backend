@@ -8,6 +8,7 @@ import { AiAgentInterface } from 'src/ai-agent/interfaces/AiAgent.interface';
 import { ProductQuestion } from 'src/product-question/entities/product-question.entity';
 import { GENERATE_QUESTIONS_PROMPTS } from '../constants/prompts.constant';
 import { NotFoundException } from '@nestjs/common';
+import { Ticket } from 'src/ticket/entities/ticket.entity';
 
 @Injectable()
 export class ProductContextService {
@@ -16,6 +17,8 @@ export class ProductContextService {
     private productContextRepository: Repository<ProductContext>,
     @InjectRepository(ProductQuestion)
     private productQuestionRepository: Repository<ProductQuestion>,
+    @InjectRepository(Ticket)
+    private ticketRepository: Repository<Ticket>,
   ) {}
 
   async createProductContext(product: Product, aiAgent: AiAgentInterface) {
@@ -112,11 +115,108 @@ export class ProductContextService {
       );
     }
 
-    // If images array doesn’t exist yet, create it
+    // If images array doesn't exist yet, create it
     productContext.images = productContext.images
       ? [...productContext.images, imagePath]
       : [imagePath];
 
     return this.productContextRepository.save(productContext);
+  }
+
+  async analyzeImageAndGenerateTickets(
+    productId: number,
+    imagePath: string,
+    aiAgent: AiAgentInterface,
+  ): Promise<any> {
+    let productContext: ProductContext | null = null;
+    try {
+      productContext = await this.getQuestionsWithAnswersByProductId(productId);
+    } catch (error) {
+      console.log('No product context found, proceeding without it');
+    }
+
+    let imageAnalysisPrompt = `You are an expert project manager and ticket creator. 
+Analyze the provided image and create detailed tickets based on the visual content.
+
+`;
+
+    if (productContext && productContext.productQuestions && productContext.productQuestions.length > 0) {
+      imageAnalysisPrompt += `Product Context Information:\n`;
+      productContext.productQuestions.forEach((question) => {
+        const answer = productContext.answers.find(
+          (a) => a.productQuestion && a.productQuestion.id === question.id,
+        );
+        if (answer) {
+          imageAnalysisPrompt += `Q: ${question.questionText}\nA: ${answer.answerText}\n\n`;
+        }
+      });
+    }
+
+    imageAnalysisPrompt += `Based on the image content and available context, create tickets in the following JSON format:
+
+[
+  {
+    "title": "Clear, concise ticket title",
+    "description": "Detailed description including context, requirements, and acceptance criteria",
+    "status": "todo",
+    "priority": "low|medium|high|urgent"
+  }
+]
+
+Guidelines for ticket creation:
+- Create actionable, well-defined tickets
+- Include enough context for a developer to understand and implement
+- Use appropriate priority levels
+- Each ticket should represent a single, manageable unit of work
+- Focus on bugs, features, improvements, or tasks identified in the image
+
+Return ONLY valid JSON - no extra text, no markdown formatting.`;
+
+    // Process image with AI to generate tickets directly
+    const aiResponse = await aiAgent.generateResponseWithImage(
+      imageAnalysisPrompt,
+      imagePath,
+    );
+
+    // Parse AI response
+    let ticketsToCreate: any[] = [];
+    try {
+      const cleanResponse = aiResponse
+        .trim()
+        .replace(/```(json)?/g, '')
+        .replace(/```/g, '');
+      ticketsToCreate = JSON.parse(cleanResponse);
+    } catch (error) {
+      console.error('Failed to parse AI response:', error);
+      throw new Error('Invalid AI response format');
+    }
+
+    // Create tickets directly from AI output
+    const createdTickets: Ticket[] = [];
+    for (const ticketData of ticketsToCreate) {
+      const ticket = new Ticket();
+      ticket.title = ticketData.title;
+      ticket.description = ticketData.description;
+      ticket.status = ticketData.status || 'todo';
+      ticket.priority = ticketData.priority || 'medium';
+      
+      // Associate with product
+      const productContextResult = await this.productContextRepository.findOne({
+        where: { id: productId },
+        relations: ['product'],
+      });
+      
+      if (productContextResult && productContextResult.product) {
+        ticket.product = productContextResult.product;
+      }
+
+      const savedTicket = await this.ticketRepository.save(ticket);
+      createdTickets.push(savedTicket);
+    }
+
+    return {
+      message: `Successfully created ${createdTickets.length} tickets from image`,
+      tickets: createdTickets
+    };
   }
 }

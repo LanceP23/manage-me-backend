@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { Exclude } from 'class-transformer';
 import { ChatSession } from '../../chat/entities/ChatSession.entity';
 import { Answer } from '../../answer/entities/answer.entity';
+import { Ticket } from 'src/ticket/entities/ticket.entity';
 
 @Entity('users')
 @Unique(['email'])
@@ -48,4 +49,7 @@ export class User extends BaseEntity {
 
   @OneToMany(() => Answer, answer => answer.user)
   answers: Answer[];
+
+   @OneToMany(() => Ticket, (ticket) => ticket.assignedTo)
+  tickets: Ticket[];
 }

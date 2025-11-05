@@ -13,6 +13,7 @@ import { AnswerModule } from './answer/answer.module';
 import { ChatModule } from './chat/chat.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
+import { TicketModule } from './ticket/ticket.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { join } from 'path';
     ProductQuestionModule,
     AnswerModule,
     ChatModule,
+    TicketModule,
   ],
   controllers: [AppController],
   providers: [AppService],
