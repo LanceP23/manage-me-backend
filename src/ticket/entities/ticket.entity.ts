@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Product } from '../../product/entities/Product.entity';
+import { Organization } from '../../organization/entities/organization.entity';
 
 @Entity()
 export class Ticket {
@@ -45,4 +46,10 @@ export class Ticket {
 
   @ManyToOne(() => Product, (product) => product.tickets, { nullable: true })
   product: Product | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  organizationId: string | null;
+
+  @ManyToOne(() => Organization, { nullable: true })
+  organization: Organization | null;
 }

@@ -1,12 +1,16 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, HttpStatus, HttpCode, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, HttpStatus, HttpCode, BadRequestException, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { User } from './entities/user.entity';
 import { CreateUserDto } from './dtos/create-user.dto';
 import { ClassSerializerInterceptor } from '@nestjs/common';
 import { UseInterceptors } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OrgGuard } from '../organization/guards/org.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Controller('users')
 @UseInterceptors(ClassSerializerInterceptor)
+@UseGuards(JwtAuthGuard, OrgGuard, AdminGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

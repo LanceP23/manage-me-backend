@@ -9,12 +9,17 @@ import {
   HttpStatus,
   HttpCode,
   ParseIntPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { AnswerService } from './answer.service';
 import { CreateAnswerDto } from './dto/create-answer.dto';
 import { UpdateAnswerDto } from './dto/update-answer.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OrgGuard } from '../organization/guards/org.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Controller('answer')
+@UseGuards(JwtAuthGuard, OrgGuard, AdminGuard)
 export class AnswerController {
   constructor(private readonly answerService: AnswerService) {}
 

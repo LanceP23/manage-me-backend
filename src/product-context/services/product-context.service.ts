@@ -1,14 +1,17 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ProductContext } from '../entities/ProductContext.entity';
 import { Repository } from 'typeorm';
 import { Product } from 'src/product/entities/Product.entity';
 import { AiAgentInterface } from 'src/ai-agent/interfaces/AiAgent.interface';
 import { ProductQuestion } from 'src/product-question/entities/product-question.entity';
-import { GENERATE_QUESTIONS_PROMPTS } from '../constants/prompts.constant';
+import {
+  PRODUCT_CONTEXT_QUESTIONS_PROMPT_V1,
+  IMAGE_TICKET_DRAFTS_PROMPT_V1,
+} from 'src/ai-agent/prompts/product-context.prompts';
 import { NotFoundException } from '@nestjs/common';
-import { Ticket } from 'src/ticket/entities/ticket.entity';
+import { TicketDraftService } from 'src/ticket/ticket-draft.service';
+import { AiEvaluationLogService } from 'src/ai-agent/ai-evaluation.service';
 
 @Injectable()
 export class ProductContextService {
@@ -17,8 +20,8 @@ export class ProductContextService {
     private productContextRepository: Repository<ProductContext>,
     @InjectRepository(ProductQuestion)
     private productQuestionRepository: Repository<ProductQuestion>,
-    @InjectRepository(Ticket)
-    private ticketRepository: Repository<Ticket>,
+    private ticketDraftService: TicketDraftService,
+    private aiEvaluationLogService: AiEvaluationLogService,
   ) {}
 
   async createProductContext(product: Product, aiAgent: AiAgentInterface) {
@@ -40,10 +43,48 @@ export class ProductContextService {
     // First save the product context to establish the product relationship
     await this.productContextRepository.save(productContext);
 
-    const prompt = GENERATE_QUESTIONS_PROMPTS.PROMPT_1;
-    const response = await aiAgent.generateResponse(prompt);
+    const prompt = PRODUCT_CONTEXT_QUESTIONS_PROMPT_V1.prompt;
+    let response = '';
+    try {
+      response = await aiAgent.generateResponse(prompt);
+      await this.aiEvaluationLogService.logSuccess({
+        provider: aiAgent.providerName,
+        prompt,
+        response,
+        context: aiAgent.context,
+        organizationId: product.organizationId || null,
+        metadata: {
+          type: 'product-context-questions',
+          productId: product.id,
+          promptVersion: PRODUCT_CONTEXT_QUESTIONS_PROMPT_V1.version,
+        },
+      });
+    } catch (error) {
+      await this.aiEvaluationLogService.logFailure({
+        provider: aiAgent.providerName,
+        prompt,
+        context: aiAgent.context,
+        organizationId: product.organizationId || null,
+        errorMessage: error?.message || 'AI generation failed',
+        metadata: {
+          type: 'product-context-questions',
+          productId: product.id,
+          promptVersion: PRODUCT_CONTEXT_QUESTIONS_PROMPT_V1.version,
+        },
+      });
+      throw error;
+    }
 
-    let questionsJson = await this.parseResponseToJson(response);
+    let questionsJson: { id: number; question: string }[] = [];
+    try {
+      questionsJson = await this.parseResponseToJson(response);
+    } catch (error) {
+      const fallbackQuestions = this.getDefaultQuestions();
+      questionsJson = fallbackQuestions.map((question, index) => ({
+        id: index + 1,
+        question,
+      }));
+    }
 
     const productQuestions = questionsJson.map((q) => {
       const pq = new ProductQuestion();
@@ -94,11 +135,44 @@ export class ProductContextService {
 
       questionsJson = JSON.parse(cleanResponse);
     } catch (error) {
+      const fallback = this.extractNumberedQuestions(response);
+      if (fallback.length) {
+        return fallback.map((question, index) => ({
+          id: index + 1,
+          question,
+        }));
+      }
       console.error('❌ Failed to parse AI response:', error);
       console.error('Response content:', response);
       throw new Error('Invalid AI response format');
     }
     return questionsJson;
+  }
+
+  private extractNumberedQuestions(response: string): string[] {
+    if (!response) {
+      return [];
+    }
+    return response
+      .split('\n')
+      .map((line) => line.trim())
+      .map((line) => line.replace(/^\d+\\.?\\s*/, '').trim())
+      .filter((line) => line.length > 0 && /^[A-Za-z]/.test(line));
+  }
+
+  private getDefaultQuestions(): string[] {
+    return [
+      'What is the primary goal of this product?',
+      'Who are the target users for this product?',
+      'What are the key features or workflows?',
+      'Are there known issues or bugs to address first?',
+      'What are the technical constraints or requirements?',
+      'What integrations are required (if any)?',
+      'What is the expected timeline or milestone?',
+      'Who are the main stakeholders and owners?',
+      'What risks or dependencies should we track?',
+      'How should new tickets be prioritized?',
+    ];
   }
 
   async addImage(productId: number, imagePath: string) {
@@ -135,48 +209,66 @@ export class ProductContextService {
       console.log('No product context found, proceeding without it');
     }
 
-    let imageAnalysisPrompt = `You are an expert project manager and ticket creator. 
-Analyze the provided image and create detailed tickets based on the visual content.
-
-`;
-
-    if (productContext && productContext.productQuestions && productContext.productQuestions.length > 0) {
-      imageAnalysisPrompt += `Product Context Information:\n`;
+    let contextText = '';
+    if (
+      productContext &&
+      productContext.productQuestions &&
+      productContext.productQuestions.length > 0
+    ) {
+      const lines: string[] = [];
       productContext.productQuestions.forEach((question) => {
         const answer = productContext.answers.find(
           (a) => a.productQuestion && a.productQuestion.id === question.id,
         );
         if (answer) {
-          imageAnalysisPrompt += `Q: ${question.questionText}\nA: ${answer.answerText}\n\n`;
+          lines.push(`Q: ${question.questionText}`);
+          lines.push(`A: ${answer.answerText}`);
+          lines.push('');
         }
       });
+      contextText = lines.join('\n').trim();
     }
 
-    imageAnalysisPrompt += `Based on the image content and available context, create tickets in the following JSON format:
-
-[
-  {
-    "title": "Clear, concise ticket title",
-    "description": "Detailed description including context, requirements, and acceptance criteria",
-    "status": "todo",
-    "priority": "low|medium|high|urgent"
-  }
-]
-
-Guidelines for ticket creation:
-- Create actionable, well-defined tickets
-- Include enough context for a developer to understand and implement
-- Use appropriate priority levels
-- Each ticket should represent a single, manageable unit of work
-- Focus on bugs, features, improvements, or tasks identified in the image
-
-Return ONLY valid JSON - no extra text, no markdown formatting.`;
+    const imageAnalysisPrompt = IMAGE_TICKET_DRAFTS_PROMPT_V1.build(
+      contextText || undefined,
+    );
 
     // Process image with AI to generate tickets directly
-    const aiResponse = await aiAgent.generateResponseWithImage(
-      imageAnalysisPrompt,
-      imagePath,
-    );
+    let aiResponse = '';
+    try {
+      aiResponse = await aiAgent.generateResponseWithImage(
+        imageAnalysisPrompt,
+        imagePath,
+      );
+      await this.aiEvaluationLogService.logSuccess({
+        provider: aiAgent.providerName,
+        prompt: imageAnalysisPrompt,
+        response: aiResponse,
+        context: aiAgent.context,
+        organizationId: productContext?.product?.organizationId || null,
+        metadata: {
+          type: 'image-ticket-drafts',
+          productId,
+          imagePath,
+          promptVersion: IMAGE_TICKET_DRAFTS_PROMPT_V1.version,
+        },
+      });
+    } catch (error) {
+      await this.aiEvaluationLogService.logFailure({
+        provider: aiAgent.providerName,
+        prompt: imageAnalysisPrompt,
+        context: aiAgent.context,
+        organizationId: productContext?.product?.organizationId || null,
+        errorMessage: error?.message || 'AI image analysis failed',
+        metadata: {
+          type: 'image-ticket-drafts',
+          productId,
+          imagePath,
+          promptVersion: IMAGE_TICKET_DRAFTS_PROMPT_V1.version,
+        },
+      });
+      throw error;
+    }
 
     // Parse AI response
     let ticketsToCreate: any[] = [];
@@ -185,38 +277,53 @@ Return ONLY valid JSON - no extra text, no markdown formatting.`;
         .trim()
         .replace(/```(json)?/g, '')
         .replace(/```/g, '');
-      ticketsToCreate = JSON.parse(cleanResponse);
+      const start = cleanResponse.indexOf('[');
+      const end = cleanResponse.lastIndexOf(']');
+      const extracted =
+        start !== -1 && end !== -1 && end > start
+          ? cleanResponse.slice(start, end + 1)
+          : cleanResponse;
+      ticketsToCreate = JSON.parse(extracted);
     } catch (error) {
       console.error('Failed to parse AI response:', error);
+      await this.aiEvaluationLogService.logFailure({
+        provider: aiAgent.providerName,
+        prompt: imageAnalysisPrompt,
+        response: aiResponse,
+        context: aiAgent.context,
+        organizationId: productContext?.product?.organizationId || null,
+        errorMessage: error?.message || 'Invalid AI response format',
+        metadata: {
+          type: 'image-ticket-drafts',
+          productId,
+          imagePath,
+          promptVersion: IMAGE_TICKET_DRAFTS_PROMPT_V1.version,
+        },
+      });
       throw new Error('Invalid AI response format');
     }
 
-    // Create tickets directly from AI output
-    const createdTickets: Ticket[] = [];
-    for (const ticketData of ticketsToCreate) {
-      const ticket = new Ticket();
-      ticket.title = ticketData.title;
-      ticket.description = ticketData.description;
-      ticket.status = ticketData.status || 'todo';
-      ticket.priority = ticketData.priority || 'medium';
-      
-      // Associate with product
-      const productContextResult = await this.productContextRepository.findOne({
-        where: { id: productId },
-        relations: ['product'],
-      });
-      
-      if (productContextResult && productContextResult.product) {
-        ticket.product = productContextResult.product;
-      }
+    const drafts = ticketsToCreate.map((ticketData) => ({
+      title: ticketData.title,
+      description: ticketData.description,
+      status: ticketData.status || 'todo',
+      priority: ticketData.priority || 'medium',
+      source: 'scrape',
+      aiProvider: aiAgent.providerName,
+      confidence:
+        typeof ticketData.confidence === 'number'
+          ? ticketData.confidence
+          : undefined,
+      rawInputHash: undefined,
+      productId,
+    }));
 
-      const savedTicket = await this.ticketRepository.save(ticket);
-      createdTickets.push(savedTicket);
-    }
+    const orgId = productContext?.product?.organizationId || undefined;
+    const createdDrafts = await this.ticketDraftService.createDrafts(drafts, orgId);
 
     return {
-      message: `Successfully created ${createdTickets.length} tickets from image`,
-      tickets: createdTickets
+      message: `Successfully created ${createdDrafts.length} ticket drafts from image`,
+      drafts: createdDrafts,
     };
   }
 }

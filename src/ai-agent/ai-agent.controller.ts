@@ -1,15 +1,18 @@
-import { Controller, Post, Body, HttpStatus, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request } from '@nestjs/common';
 import { AiAgentService } from './ai-agent.service';
 import { SendPromptDto } from './dto/send-prompt-dto';
-import { GoogleGeminiAi } from './entities/GoogleGeminiAi.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AiProviderService } from './ai-provider.service';
+import { OrgGuard } from '../organization/guards/org.guard';
+import { UsageService } from '../usage/usage.service';
 
 @Controller()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, OrgGuard)
 export class AiAgentController {
   constructor(
     private readonly aiAgentService: AiAgentService,
-    private readonly googleGemini: GoogleGeminiAi,
+    private readonly aiProvider: AiProviderService,
+    private readonly usageService: UsageService,
   ) {}
 
   @Post('/prompt-ai')
@@ -17,13 +20,25 @@ export class AiAgentController {
     try {
       // Pass the authenticated user to the service
       const user = req.user;
-      
+      const organizationId = req.organizationId;
+
+      await this.usageService.assertWithinLimit(organizationId, 'ai_prompt');
+
+      const aiAgent = this.aiProvider.getProvider();
+
       const response = await this.aiAgentService.promptAiAgent(
         sendPromptDto.prompt,
-        this.googleGemini,
+        aiAgent,
         sendPromptDto.chatSessionId,
-        user, // Pass user to associate with chat session
+        user,
+        organizationId,
       );
+
+      await this.usageService.recordEvent({
+        organizationId,
+        userId: user?.id,
+        kind: 'ai_prompt',
+      });
 
       return {
         status: 'success',

@@ -8,12 +8,24 @@ import {
 import { API_CONFIG } from './config/api.config';
 import * as dotenv from 'dotenv';
 import { Reflector } from '@nestjs/core';
+import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
   // Load environment variables
   dotenv.config();
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  app.enableCors({
+    origin: ['http://localhost:3000'],
+    credentials: true,
+  });
+  const rawBodySaver = (req: any, _res: any, buf: Buffer) => {
+    if (buf?.length) {
+      req.rawBody = buf.toString('utf8');
+    }
+  };
+  app.use(bodyParser.json({ verify: rawBodySaver }));
+  app.use(bodyParser.urlencoded({ extended: true, verify: rawBodySaver }));
 
   // Set global prefix for all routes
   app.setGlobalPrefix(API_CONFIG.PREFIX);

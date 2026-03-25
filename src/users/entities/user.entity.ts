@@ -6,6 +6,8 @@ import { Exclude } from 'class-transformer';
 import { ChatSession } from '../../chat/entities/ChatSession.entity';
 import { Answer } from '../../answer/entities/answer.entity';
 import { Ticket } from 'src/ticket/entities/ticket.entity';
+import { Product } from 'src/product/entities/Product.entity';
+import { OrganizationMember } from '../../organization/entities/organization-member.entity';
 
 @Entity('users')
 @Unique(['email'])
@@ -52,4 +54,10 @@ export class User extends BaseEntity {
 
    @OneToMany(() => Ticket, (ticket) => ticket.assignedTo)
   tickets: Ticket[];
+
+  @OneToMany(() => Product, (product) => product.user)
+products: Product[];
+
+  @OneToMany(() => OrganizationMember, (member) => member.user)
+  organizationMemberships: OrganizationMember[];
 }

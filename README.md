@@ -1,170 +1,173 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Manage Me Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS backend for the Manage Me application. It uses PostgreSQL with TypeORM and exposes versioned APIs under `/api/v1`.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Prerequisites
 
-## Description
+- Node.js with npm
+- Docker Desktop or Docker Engine with Compose support
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Quick Start
 
-## PostgreSQL Database Setup
+### 1. Install dependencies
 
-This project uses PostgreSQL as its database. You can run PostgreSQL using Docker for easy setup and development.
+```bash
+npm install
+```
 
-### Docker Setup (Recommended)
+### 2. Create your local environment file
 
-1. Make sure you have Docker installed and running
-2. Start the PostgreSQL database:
-   ```bash
-   docker compose up -d
-   ```
-   
-   This starts PostgreSQL mapped on host port `5433` (container is `5432`).
+```bash
+cp .env.example .env
+```
 
-3. Connection details (from your host):
-   - Host: `localhost` (or `127.0.0.1`)
-   - Port: `5433`
-   - Username: `postgres`
-   - Password: `postgres`
-   - Database: `manage_me_db`
-   - URL: `postgres://postgres:postgres@localhost:5433/manage_me_db`
-
-4. Connecting from another device on your LAN:
-   - Host: your PC's LAN IP (find with `ipconfig` → IPv4 Address)
-   - Ensure Windows Firewall allows inbound TCP `5433`
-   - Same username/password/database as above
-
-5. Optional: If you add `pgadmin` service later, expose it (e.g. `5050`) and connect to host `postgres` (service name) on port `5432` inside the compose network.
-
-### Manual Setup (Alternative)
-
-If you prefer to use your own PostgreSQL installation:
-
-1. Install PostgreSQL on your machine
-2. Create a database (default name: `manage_me_db`)
-3. Update the `.env` file with your database credentials
-
-### Environment Variables
-
-The following environment variables are used for database configuration:
+Minimum values to review in `.env`:
 
 ```env
-# Database Configuration
+PORT=3000
+JWT_SECRET=local-dev-secret
+
 DB_HOST=localhost
 DB_PORT=5433
 DB_USERNAME=postgres
 DB_PASSWORD=postgres
 DB_NAME=manage_me_db
 DB_SYNCHRONIZE=true
-DB_LOGGING=false
-DB_SSL=false
 ```
 
-### Database Commands
+Notes:
 
-- Generate migration: `npm run migration:generate -- src/migrations/MyMigration`
-- Run migrations: `npm run migration:run`
-- Revert migration: `npm run migration:revert`
+- `JWT_SECRET` is required. The app will not start without it.
+- If you use the included `docker-compose.yml`, keep `DB_PORT=5433`.
+- AI and integration variables can stay blank unless you are testing those features.
 
-If you need to bypass a malformed local `.env` during CLI runs:
-```bash
-cmd /c "set NO_DOTENV=true & set DB_HOST=127.0.0.1 & set DB_PORT=5433 & set DB_USERNAME=postgres & set DB_PASSWORD=postgres & set DB_NAME=manage_me_db & npm run migration:run"
-```
+### 3. Start PostgreSQL
 
-## Where the DB connection is initialized (NestJS)
-
-- Runtime (app boot): `src/database/database.module.ts`
-  - Uses `TypeOrmModule.forRoot({...})` with values from `src/config/database.config.ts` to create the TypeORM connection for the Nest app.
-- CLI (migrations): `src/data-source.ts`
-  - Provides the TypeORM `DataSource` for CLI commands like migrations.
-  - We scope entities to `src/**/*.entity.{ts,js}` to avoid importing test files.
-
-## Project setup
+Start just the database:
 
 ```bash
-$ npm install
+docker compose up -d postgres
 ```
 
-## Compile and run the project
+Or start PostgreSQL plus pgAdmin:
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+docker compose up -d
 ```
 
-## Run tests
+Local service URLs:
+
+- PostgreSQL: `localhost:5433`
+- pgAdmin: `http://localhost:5050`
+
+Default database credentials:
+
+- Database: `manage_me_db`
+- Username: `postgres`
+- Password: `postgres`
+
+### 4. Start the API
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm run start:dev
 ```
 
-## Deployment
+The backend will be available at:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+- API base URL: `http://localhost:3000/api/v1`
+- Static uploads: `http://localhost:3000/uploads`
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## First Login
+
+There is no public signup endpoint in this backend. Seed an initial admin user and organization first.
+
+### Seed a default admin and org
+
+Uses these defaults if you do not override them:
+
+- Admin email: `admin@example.com`
+- Admin password: `password123`
+- Organization name: `Default Org`
+- Organization slug: `default-org`
+
+Run the seed:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm run seed:org
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Optional custom seed values:
 
-## Resources
+```bash
+SEED_ADMIN_EMAIL=owner@example.com \
+SEED_ADMIN_PASSWORD=changeme123 \
+SEED_ADMIN_FIRST_NAME=Owner \
+SEED_ADMIN_LAST_NAME=User \
+SEED_ORG_NAME="My Org" \
+SEED_ORG_SLUG=my-org \
+npm run seed:org
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+### Log in
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"password123"}'
+```
 
-## Support
+The login response includes:
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+- `access_token`
+- `user.organizations`
+- `user.defaultOrgId`
 
-## Stay in touch
+For protected organization-scoped endpoints, send both:
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- `Authorization: Bearer <access_token>`
+- `x-org-id: <organization id>`
 
-## License
+## Available Commands
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+```bash
+npm run start
+npm run start:dev
+npm run start:prod
+
+npm run build
+npm run lint
+
+npm run test
+npm run test:e2e
+npm run test:cov
+
+npm run migration:generate -- src/migrations/MyMigration
+npm run migration:run
+npm run migration:revert
+```
+
+## Database Notes
+
+- Local development usually works with `DB_SYNCHRONIZE=true`.
+- The TypeORM CLI reads from `src/data-source.ts`.
+- The Nest runtime database connection is configured in `src/database/database.module.ts`.
+
+If you want to use your own PostgreSQL instance instead of Docker, update the database values in `.env` and start the app normally.
+
+## Troubleshooting
+
+### `JWT_SECRET is not defined in environment variables`
+
+Set `JWT_SECRET` in `.env`, then restart the server.
+
+### Cannot connect to Postgres
+
+Check all of the following:
+
+- `docker compose ps` shows the `postgres` container running
+- `.env` uses `DB_HOST=localhost`
+- `.env` uses `DB_PORT=5433` when running through Docker Compose
+
+### Auth succeeds but protected requests fail
+
+Most protected routes also require the `x-org-id` header. Use one of the organization IDs returned by the login endpoint.

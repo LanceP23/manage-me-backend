@@ -6,10 +6,15 @@ import { Answer } from './entities/answer.entity';
 import { ProductContext } from 'src/product-context/entities/ProductContext.entity';
 import { ProductQuestion } from 'src/product-question/entities/product-question.entity';
 import { User } from 'src/users/entities/user.entity';
+import { OrganizationModule } from '../organization/organization.module';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Answer, ProductContext, ProductQuestion, User])],
-  providers: [AnswerService],
+  imports: [
+    TypeOrmModule.forFeature([Answer, ProductContext, ProductQuestion, User]),
+    OrganizationModule,
+  ],
+  providers: [AnswerService, AdminGuard],
   controllers: [AnswerController],
 })
 export class AnswerModule {}

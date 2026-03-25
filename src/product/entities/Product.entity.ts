@@ -11,6 +11,7 @@ import {
 import { User } from 'src/users/entities/user.entity';
 import { ProductContext } from 'src/product-context/entities/ProductContext.entity';
 import { Ticket } from 'src/ticket/entities/ticket.entity';
+import { Organization } from 'src/organization/entities/organization.entity';
 
 @Entity()
 export class Product {
@@ -34,4 +35,10 @@ export class Product {
 
   @OneToMany(() => Ticket, (ticket) => ticket.product)
   tickets: Ticket[];
+
+  @Column({ type: 'uuid', nullable: true })
+  organizationId: string | null;
+
+  @ManyToOne(() => Organization, { nullable: true })
+  organization: Organization | null;
 }

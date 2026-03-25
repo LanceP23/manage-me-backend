@@ -8,6 +8,8 @@ export type JwtPayload = {
   email: string;
   firstName: string;
   lastName: string;
+  orgIds?: string[];
+  defaultOrgId?: string | null;
 };
 
 @Injectable()
@@ -31,7 +33,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       userId: payload.sub, 
       email: payload.email,
       firstName: payload.firstName,
-      lastName: payload.lastName
+      lastName: payload.lastName,
+      orgIds: payload.orgIds || [],
+      defaultOrgId: payload.defaultOrgId ?? null,
     };
   }
 }

@@ -14,6 +14,10 @@ import { ChatModule } from './chat/chat.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { TicketModule } from './ticket/ticket.module';
+import { IntegrationsModule } from './integrations/integrations.module';
+import { OrganizationModule } from './organization/organization.module';
+import { AgentModule } from './agent/agent.module';
+import { UsageModule } from './usage/usage.module';
 
 @Module({
   imports: [
@@ -34,9 +38,12 @@ import { TicketModule } from './ticket/ticket.module';
     AnswerModule,
     ChatModule,
     TicketModule,
+    IntegrationsModule,
+    OrganizationModule,
+    AgentModule,
+    UsageModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {}
-
