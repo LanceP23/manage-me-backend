@@ -58,7 +58,7 @@ type ActionRecommendation = {
   recommendedTargetTicket: TicketTriageActionTarget;
 };
 
-type TriageMode = 'heuristic' | 'hybrid';
+type TriageMode = 'heuristic' | 'hybrid' | 'ai_only';
 
 type TriageReasoningRewrite = {
   reportIndex: number;
@@ -70,6 +70,14 @@ type TriageReasoningRewrite = {
 
 type TriageReasoningRewriteResponse = {
   rewrites: TriageReasoningRewrite[];
+};
+
+type AiOnlyRecommendation = Partial<TicketTriageRecommendation> & {
+  rawReport?: string;
+};
+
+type AiOnlyAnalysisResponse = {
+  recommendations?: AiOnlyRecommendation[];
 };
 
 const PRIORITY_ORDER: Record<TriagePriority, number> = {
@@ -235,26 +243,43 @@ export class TicketTriageService {
     input: AnalyzeTicketTriageDto,
     organizationId?: string,
   ): Promise<TicketTriageAnalysisResponseDto> {
-    const requestedMode: TriageMode = input.mode === 'heuristic' ? 'heuristic' : 'hybrid';
+    const requestedMode: TriageMode =
+      input.mode === 'heuristic'
+        ? 'heuristic'
+        : input.mode === 'ai_only'
+          ? 'ai_only'
+          : 'hybrid';
     const pastTickets = await this.resolvePastTickets(input, organizationId);
 
     const heuristicRecommendations = input.rawReports.map((rawReport) =>
       this.analyzeReport(rawReport, input, pastTickets),
     );
 
-    const {
-      recommendations,
-      reasoningSource,
-    } = requestedMode === 'hybrid'
-      ? await this.rewriteReasoningWithLlm(
-          heuristicRecommendations,
-          input,
-          organizationId,
-        )
-      : {
-          recommendations: heuristicRecommendations,
-          reasoningSource: 'heuristic' as const,
-        };
+    let recommendations = heuristicRecommendations;
+    let reasoningSource:
+      | 'heuristic'
+      | 'llm_rewritten'
+      | 'heuristic_fallback'
+      | 'ai_full' = 'heuristic';
+
+    if (requestedMode === 'hybrid') {
+      const result = await this.rewriteReasoningWithLlm(
+        heuristicRecommendations,
+        input,
+        organizationId,
+      );
+      recommendations = result.recommendations;
+      reasoningSource = result.reasoningSource;
+    } else if (requestedMode === 'ai_only') {
+      const result = await this.runAiOnlyAnalysis(
+        heuristicRecommendations,
+        input,
+        pastTickets,
+        organizationId,
+      );
+      recommendations = result.recommendations;
+      reasoningSource = result.reasoningSource;
+    }
 
     const highestPriority = recommendations.reduce<TriagePriority>(
       (current, item) =>
@@ -340,6 +365,77 @@ export class TicketTriageService {
 
       return {
         recommendations,
+        reasoningSource: 'heuristic_fallback',
+      };
+    }
+  }
+
+  private async runAiOnlyAnalysis(
+    heuristicRecommendations: TicketTriageRecommendation[],
+    input: AnalyzeTicketTriageDto,
+    pastTickets: NonNullable<AnalyzeTicketTriageDto['pastTickets']>,
+    organizationId?: string,
+  ): Promise<{
+    recommendations: TicketTriageRecommendation[];
+    reasoningSource: 'ai_full' | 'heuristic_fallback';
+  }> {
+    if (!heuristicRecommendations.length) {
+      return {
+        recommendations: heuristicRecommendations,
+        reasoningSource: 'heuristic_fallback',
+      };
+    }
+
+    const aiAgent = this.aiProviderService.getProvider();
+    const prompt = this.buildAiOnlyPrompt(input, pastTickets);
+
+    try {
+      const response = await aiAgent.generateResponse(prompt);
+      const parsed = this.parseAiOnlyResponse(response);
+      const normalized = this.normalizeAiOnlyRecommendations(
+        parsed,
+        heuristicRecommendations,
+        input,
+        pastTickets,
+      );
+
+      await this.aiEvaluationLogService.logSuccess({
+        provider: aiAgent.providerName,
+        prompt,
+        response,
+        context: aiAgent.context,
+        organizationId,
+        metadata: {
+          type: 'ticket-triage-analysis',
+          mode: 'ai_only',
+          reportCount: heuristicRecommendations.length,
+        },
+      });
+
+      return {
+        recommendations: normalized,
+        reasoningSource: 'ai_full',
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to run full AI triage';
+
+      await this.aiEvaluationLogService.logFailure({
+        provider: aiAgent.providerName,
+        prompt,
+        response: null,
+        context: aiAgent.context,
+        organizationId,
+        errorMessage: message,
+        metadata: {
+          type: 'ticket-triage-analysis',
+          mode: 'ai_only',
+          reportCount: heuristicRecommendations.length,
+        },
+      });
+
+      return {
+        recommendations: heuristicRecommendations,
         reasoningSource: 'heuristic_fallback',
       };
     }
@@ -919,6 +1015,40 @@ export class TicketTriageService {
     ].join('\n');
   }
 
+  private buildAiOnlyPrompt(
+    input: AnalyzeTicketTriageDto,
+    pastTickets: NonNullable<AnalyzeTicketTriageDto['pastTickets']>,
+  ) {
+    const context = {
+      rawReports: input.rawReports,
+      context: input.context ?? null,
+      candidateOwners: input.candidateOwners ?? [],
+      pastTickets,
+    };
+
+    return [
+      'You are the decision engine for incoming software issues.',
+      'You must decide priority, owner, effort, duplicate risk, recommended action, and matched historical tickets.',
+      'Return strict JSON only.',
+      'Do not include markdown.',
+      'Base the decision on the raw reports, candidate owners, and historical tickets.',
+      'Use the candidate owners exactly as provided. Do not invent new owners.',
+      'Use only the provided historical tickets for matchedPastTickets and recommendedTargetTicket.',
+      'recommendedAction must be one of: create_draft, link_existing, merge_into_existing, reopen_existing.',
+      'duplicateRisk must be one of: low, medium, high.',
+      'priority must be one of: low, medium, high.',
+      'effortEstimate must be one of: small, medium, large.',
+      'confidence must be a number from 0 to 1.',
+      'Each reasoning array should contain 2 to 4 concise bullets and should be specific to the issue.',
+      'If a strong in-progress match exists, prefer merge_into_existing.',
+      'If a strong completed match appears to be a regression, prefer reopen_existing.',
+      'Return JSON with this shape:',
+      '{"recommendations":[{"rawReport":"...","priority":"high","priorityReasoning":["..."],"suggestedOwner":{"id":"...","name":"..."},"ownerReasoning":["..."],"effortEstimate":"large","effortReasoning":["..."],"duplicateRisk":"high","recommendedAction":"merge_into_existing","recommendedActionReasoning":["..."],"recommendedTargetTicket":{"id":"42","title":"...","status":"in_progress"},"matchedPastTickets":[{"id":"42","title":"...","status":"in_progress","similarityReason":"..."}],"confidence":0.87}]}',
+      'Context:',
+      JSON.stringify(context),
+    ].join('\n');
+  }
+
   private parseReasoningRewriteResponse(
     response: string,
   ): TriageReasoningRewriteResponse {
@@ -952,6 +1082,227 @@ export class TicketTriageService {
           ),
         })),
     };
+  }
+
+  private parseAiOnlyResponse(response: string): AiOnlyAnalysisResponse {
+    const cleanResponse = response
+      .trim()
+      .replace(/```json/gi, '')
+      .replace(/```/g, '');
+
+    const extracted = this.extractJsonObject(cleanResponse) ?? cleanResponse;
+    let parsed: any;
+    try {
+      parsed = JSON.parse(extracted);
+    } catch (error) {
+      throw new Error('Invalid AI response format: expected triage analysis JSON');
+    }
+
+    if (!parsed || !Array.isArray(parsed.recommendations)) {
+      throw new Error('Invalid AI response format: recommendations array missing');
+    }
+
+    return parsed;
+  }
+
+  private normalizeAiOnlyRecommendations(
+    parsed: AiOnlyAnalysisResponse,
+    heuristicRecommendations: TicketTriageRecommendation[],
+    input: AnalyzeTicketTriageDto,
+    pastTickets: NonNullable<AnalyzeTicketTriageDto['pastTickets']>,
+  ): TicketTriageRecommendation[] {
+    return heuristicRecommendations.map((fallback, index) => {
+      const candidate = parsed.recommendations?.[index] ?? {};
+      return {
+        rawReport:
+          typeof candidate.rawReport === 'string' && candidate.rawReport.trim()
+            ? candidate.rawReport.trim()
+            : fallback.rawReport,
+        priority: this.normalizePriority(candidate.priority, fallback.priority),
+        priorityReasoning:
+          this.normalizeReasoningArray(candidate.priorityReasoning) ??
+          fallback.priorityReasoning,
+        suggestedOwner: this.normalizeSuggestedOwner(
+          candidate.suggestedOwner,
+          input,
+          fallback.suggestedOwner,
+        ),
+        ownerReasoning:
+          this.normalizeReasoningArray(candidate.ownerReasoning) ??
+          fallback.ownerReasoning,
+        effortEstimate: this.normalizeEffort(
+          candidate.effortEstimate,
+          fallback.effortEstimate,
+        ),
+        effortReasoning:
+          this.normalizeReasoningArray(candidate.effortReasoning) ??
+          fallback.effortReasoning,
+        duplicateRisk: this.normalizeDuplicateRisk(
+          candidate.duplicateRisk,
+          fallback.duplicateRisk,
+        ),
+        recommendedAction: this.normalizeRecommendedAction(
+          candidate.recommendedAction,
+          fallback.recommendedAction,
+        ),
+        recommendedActionReasoning:
+          this.normalizeReasoningArray(candidate.recommendedActionReasoning) ??
+          fallback.recommendedActionReasoning,
+        recommendedTargetTicket: this.normalizeActionTarget(
+          candidate.recommendedTargetTicket,
+          pastTickets,
+          fallback.recommendedTargetTicket,
+        ),
+        matchedPastTickets: this.normalizeMatchedPastTickets(
+          candidate.matchedPastTickets,
+          pastTickets,
+          fallback.matchedPastTickets,
+        ),
+        confidence: this.normalizeConfidence(candidate.confidence, fallback.confidence),
+      };
+    });
+  }
+
+  private normalizePriority(
+    value: unknown,
+    fallback: TriagePriority,
+  ): TriagePriority {
+    return value === 'low' || value === 'medium' || value === 'high'
+      ? value
+      : fallback;
+  }
+
+  private normalizeEffort(value: unknown, fallback: TriageEffort): TriageEffort {
+    return value === 'small' || value === 'medium' || value === 'large'
+      ? value
+      : fallback;
+  }
+
+  private normalizeDuplicateRisk(
+    value: unknown,
+    fallback: TriageDuplicateRisk,
+  ): TriageDuplicateRisk {
+    return value === 'low' || value === 'medium' || value === 'high'
+      ? value
+      : fallback;
+  }
+
+  private normalizeRecommendedAction(
+    value: unknown,
+    fallback: TriageRecommendedAction,
+  ): TriageRecommendedAction {
+    return value === 'create_draft' ||
+      value === 'link_existing' ||
+      value === 'merge_into_existing' ||
+      value === 'reopen_existing'
+      ? value
+      : fallback;
+  }
+
+  private normalizeSuggestedOwner(
+    value: unknown,
+    input: AnalyzeTicketTriageDto,
+    fallback: TicketTriageSuggestedOwner,
+  ): TicketTriageSuggestedOwner {
+    if (!value || typeof value !== 'object') {
+      return fallback;
+    }
+
+    const ownerId =
+      typeof (value as any).id === 'string' ? (value as any).id.trim() : '';
+    const owner = input.candidateOwners?.find((candidate) => candidate.id === ownerId);
+    if (!owner) {
+      return fallback;
+    }
+
+    return {
+      id: owner.id,
+      name: owner.name,
+    };
+  }
+
+  private normalizeActionTarget(
+    value: unknown,
+    pastTickets: NonNullable<AnalyzeTicketTriageDto['pastTickets']>,
+    fallback: TicketTriageActionTarget,
+  ): TicketTriageActionTarget {
+    if (!value || typeof value !== 'object') {
+      return fallback;
+    }
+
+    const targetId =
+      typeof (value as any).id === 'string'
+        ? (value as any).id.trim()
+        : typeof (value as any).id === 'number'
+          ? String((value as any).id)
+          : '';
+
+    const matched = pastTickets.find((ticket) => String(ticket.id) === targetId);
+    if (!matched) {
+      return fallback;
+    }
+
+    return {
+      id: matched.id,
+      title: matched.title,
+      status: matched.status,
+    };
+  }
+
+  private normalizeMatchedPastTickets(
+    value: unknown,
+    pastTickets: NonNullable<AnalyzeTicketTriageDto['pastTickets']>,
+    fallback: TicketTriageMatchedPastTicket[],
+  ): TicketTriageMatchedPastTicket[] {
+    if (!Array.isArray(value)) {
+      return fallback;
+    }
+
+    const normalized: TicketTriageMatchedPastTicket[] = [];
+
+    for (const item of value) {
+      if (!item || typeof item !== 'object') {
+        continue;
+      }
+
+      const ticketId =
+        typeof (item as any).id === 'string'
+          ? (item as any).id.trim()
+          : typeof (item as any).id === 'number'
+            ? String((item as any).id)
+            : '';
+
+      const matched = pastTickets.find((ticket) => String(ticket.id) === ticketId);
+      if (!matched) {
+        continue;
+      }
+
+      const similarityReason =
+        typeof (item as any).similarityReason === 'string' &&
+        (item as any).similarityReason.trim()
+          ? (item as any).similarityReason.trim()
+          : 'The model identified this ticket as a close historical match.';
+
+      normalized.push({
+        id: matched.id,
+        title: matched.title,
+        status: matched.status,
+        similarityReason,
+      });
+
+      if (normalized.length >= 3) {
+        break;
+      }
+    }
+
+    return normalized.length ? normalized : fallback;
+  }
+
+  private normalizeConfidence(value: unknown, fallback: number) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return fallback;
+    }
+    return Number(Math.min(Math.max(value, 0), 1).toFixed(2));
   }
 
   private applyReasoningRewrites(

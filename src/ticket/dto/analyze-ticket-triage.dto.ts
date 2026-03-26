@@ -104,6 +104,6 @@ export class AnalyzeTicketTriageDto {
 
   @IsOptional()
   @IsString()
-  @IsIn(['heuristic', 'hybrid'])
-  mode?: 'heuristic' | 'hybrid';
+  @IsIn(['heuristic', 'hybrid', 'ai_only'])
+  mode?: 'heuristic' | 'hybrid' | 'ai_only';
 }

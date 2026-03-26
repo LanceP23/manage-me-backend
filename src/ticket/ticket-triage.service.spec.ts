@@ -252,4 +252,85 @@ describe('TicketTriageService', () => {
     );
     expect(aiEvaluationLogService.logFailure).toHaveBeenCalled();
   });
+
+  it('uses full AI triage output in ai_only mode when the provider succeeds', async () => {
+    aiAgent.generateResponse.mockResolvedValue(
+      JSON.stringify({
+        recommendations: [
+          {
+            rawReport:
+              'Login is failing again in production with the same internal server error for multiple users.',
+            priority: 'high',
+            priorityReasoning: [
+              'Multiple users cannot sign in, so account access is blocked.',
+            ],
+            suggestedOwner: {
+              id: 'user-1',
+              name: 'Alice',
+            },
+            ownerReasoning: [
+              'Alice owns backend auth work and the report points to server-side login failures.',
+            ],
+            effortEstimate: 'large',
+            effortReasoning: [
+              'This likely requires production auth debugging across API and login flow behavior.',
+            ],
+            duplicateRisk: 'high',
+            recommendedAction: 'merge_into_existing',
+            recommendedActionReasoning: [
+              'The in-progress login ticket matches the same internal server error pattern.',
+            ],
+            recommendedTargetTicket: {
+              id: '44',
+              title: 'Login not working',
+              status: 'in_progress',
+            },
+            matchedPastTickets: [
+              {
+                id: '44',
+                title: 'Login not working',
+                status: 'in_progress',
+                similarityReason:
+                  'Both reports describe the same internal server error during login.',
+              },
+            ],
+            confidence: 0.91,
+          },
+        ],
+      }),
+    );
+
+    const result = await service.analyze({
+      mode: 'ai_only',
+      rawReports: ['Login is failing again in production with the same internal server error for multiple users.'],
+      pastTickets: [
+        {
+          id: '44',
+          title: 'Login not working',
+          description: 'login gives error message internal server error.',
+          priority: 'high',
+          status: 'in_progress',
+          ownerHint: 'backend',
+        },
+      ],
+      candidateOwners: [
+        {
+          id: 'user-1',
+          name: 'Alice',
+          role: 'backend',
+          skills: ['auth', 'api'],
+        },
+      ],
+      context: {
+        productArea: 'authentication',
+        environment: 'production',
+      },
+    });
+
+    expect(result.summary.mode).toBe('ai_only');
+    expect(result.summary.reasoningSource).toBe('ai_full');
+    expect(result.recommendations[0].recommendedAction).toBe('merge_into_existing');
+    expect(result.recommendations[0].ownerReasoning[0]).toContain('Alice');
+    expect(aiEvaluationLogService.logSuccess).toHaveBeenCalled();
+  });
 });
