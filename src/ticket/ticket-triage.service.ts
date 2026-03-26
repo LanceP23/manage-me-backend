@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { AiEvaluationLogService } from '../ai-agent/ai-evaluation.service';
+import { AiProviderService } from '../ai-agent/ai-provider.service';
 import { AnalyzeTicketTriageDto } from './dto/analyze-ticket-triage.dto';
+import { Ticket } from './entities/ticket.entity';
 import {
   TicketTriageActionTarget,
   TicketTriageAnalysisResponseDto,
@@ -51,6 +56,20 @@ type ActionRecommendation = {
   recommendedAction: TriageRecommendedAction;
   recommendedActionReasoning: string[];
   recommendedTargetTicket: TicketTriageActionTarget;
+};
+
+type TriageMode = 'heuristic' | 'hybrid';
+
+type TriageReasoningRewrite = {
+  reportIndex: number;
+  priorityReasoning?: string[];
+  ownerReasoning?: string[];
+  effortReasoning?: string[];
+  recommendedActionReasoning?: string[];
+};
+
+type TriageReasoningRewriteResponse = {
+  rewrites: TriageReasoningRewrite[];
 };
 
 const PRIORITY_ORDER: Record<TriagePriority, number> = {
@@ -205,13 +224,37 @@ const LOW_PRIORITY_SIGNALS: PrioritySignal[] = [
 
 @Injectable()
 export class TicketTriageService {
-  analyze(
+  constructor(
+    @InjectRepository(Ticket)
+    private readonly ticketRepository: Repository<Ticket>,
+    private readonly aiProviderService: AiProviderService,
+    private readonly aiEvaluationLogService: AiEvaluationLogService,
+  ) {}
+
+  async analyze(
     input: AnalyzeTicketTriageDto,
-    _organizationId?: string,
-  ): TicketTriageAnalysisResponseDto {
-    const recommendations = input.rawReports.map((rawReport) =>
-      this.analyzeReport(rawReport, input),
+    organizationId?: string,
+  ): Promise<TicketTriageAnalysisResponseDto> {
+    const requestedMode: TriageMode = input.mode === 'heuristic' ? 'heuristic' : 'hybrid';
+    const pastTickets = await this.resolvePastTickets(input, organizationId);
+
+    const heuristicRecommendations = input.rawReports.map((rawReport) =>
+      this.analyzeReport(rawReport, input, pastTickets),
     );
+
+    const {
+      recommendations,
+      reasoningSource,
+    } = requestedMode === 'hybrid'
+      ? await this.rewriteReasoningWithLlm(
+          heuristicRecommendations,
+          input,
+          organizationId,
+        )
+      : {
+          recommendations: heuristicRecommendations,
+          reasoningSource: 'heuristic' as const,
+        };
 
     const highestPriority = recommendations.reduce<TriagePriority>(
       (current, item) =>
@@ -225,14 +268,87 @@ export class TicketTriageService {
       summary: {
         reportCount: recommendations.length,
         highestPriority,
+        mode: requestedMode,
+        reasoningSource,
       },
       recommendations,
     };
   }
 
+  private async rewriteReasoningWithLlm(
+    recommendations: TicketTriageRecommendation[],
+    input: AnalyzeTicketTriageDto,
+    organizationId?: string,
+  ): Promise<{
+    recommendations: TicketTriageRecommendation[];
+    reasoningSource: 'llm_rewritten' | 'heuristic_fallback';
+  }> {
+    if (!recommendations.length) {
+      return {
+        recommendations,
+        reasoningSource: 'heuristic_fallback',
+      };
+    }
+
+    const aiAgent = this.aiProviderService.getProvider();
+    const prompt = this.buildHybridReasoningPrompt(recommendations, input);
+
+    try {
+      const response = await aiAgent.generateResponse(prompt);
+      const parsed = this.parseReasoningRewriteResponse(response);
+      const rewrittenRecommendations = this.applyReasoningRewrites(
+        recommendations,
+        parsed.rewrites,
+      );
+
+      await this.aiEvaluationLogService.logSuccess({
+        provider: aiAgent.providerName,
+        prompt,
+        response,
+        context: aiAgent.context,
+        organizationId,
+        metadata: {
+          type: 'ticket-triage-reasoning',
+          mode: 'hybrid',
+          reportCount: recommendations.length,
+        },
+      });
+
+      return {
+        recommendations: rewrittenRecommendations,
+        reasoningSource: 'llm_rewritten',
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to rewrite triage reasoning';
+
+      await this.aiEvaluationLogService.logFailure({
+        provider: aiAgent.providerName,
+        prompt,
+        response: null,
+        context: aiAgent.context,
+        organizationId,
+        errorMessage: message,
+        metadata: {
+          type: 'ticket-triage-reasoning',
+          mode: 'hybrid',
+          reportCount: recommendations.length,
+        },
+      });
+
+      return {
+        recommendations,
+        reasoningSource: 'heuristic_fallback',
+      };
+    }
+  }
+
   private analyzeReport(
     rawReport: string,
     input: AnalyzeTicketTriageDto,
+    pastTickets: NonNullable<AnalyzeTicketTriageDto['pastTickets']>,
   ): TicketTriageRecommendation {
     const report = rawReport.trim();
     const contextText = this.buildContextText(input);
@@ -240,7 +356,7 @@ export class TicketTriageService {
     const reportTags = this.extractTags(enrichedText);
     const matchedPastTickets = this.matchPastTickets(
       enrichedText,
-      input.pastTickets || [],
+      pastTickets,
       reportTags,
     );
 
@@ -532,9 +648,10 @@ export class TicketTriageService {
       status: strongestMatch.status,
     };
     const reasons = [
-      strongestMatch.score >= 0.5
-        ? 'A strong historical match suggests the team may already be tracking the same issue.'
-        : 'A moderate historical match suggests this issue may overlap with existing work.',
+      this.describeHistoricalMatch(strongestMatch),
+      `The closest matching ticket is "${strongestMatch.title}"${
+        strongestMatch.status ? ` and is currently ${strongestMatch.status}.` : '.'
+      }`,
     ];
     const isStrongMatch =
       strongestMatch.score >= 0.24 ||
@@ -721,5 +838,213 @@ export class TicketTriageService {
 
   private uniqueReasons(reasons: string[]) {
     return [...new Set(reasons)];
+  }
+
+  private describeHistoricalMatch(match: HistoricalMatch) {
+    const signals: string[] = [];
+
+    if (match.overlap >= 4) {
+      signals.push('high term overlap');
+    } else if (match.overlap >= 2) {
+      signals.push('shared issue wording');
+    }
+
+    if (match.tagOverlap >= 2) {
+      signals.push('matching product/domain signals');
+    } else if (match.tagOverlap === 1) {
+      signals.push('at least one shared domain signal');
+    }
+
+    if (match.score >= 0.32) {
+      signals.push('high similarity score');
+    }
+
+    if (!signals.length) {
+      return 'Historical overlap suggests this may be related to existing work.';
+    }
+
+    return `Historical matching found ${signals.join(', ')} with an existing ticket.`;
+  }
+
+  private buildHybridReasoningPrompt(
+    recommendations: TicketTriageRecommendation[],
+    input: AnalyzeTicketTriageDto,
+  ) {
+    const context = {
+      mode: 'hybrid',
+      context: input.context ?? null,
+      recommendations: recommendations.map((recommendation, index) => ({
+        reportIndex: index,
+        rawReport: recommendation.rawReport,
+        priority: recommendation.priority,
+        suggestedOwner: recommendation.suggestedOwner
+          ? {
+              ...recommendation.suggestedOwner,
+              role:
+                input.candidateOwners?.find(
+                  (owner) => owner.id === recommendation.suggestedOwner?.id,
+                )?.role ?? null,
+              skills:
+                input.candidateOwners?.find(
+                  (owner) => owner.id === recommendation.suggestedOwner?.id,
+                )?.skills ?? [],
+            }
+          : null,
+        effortEstimate: recommendation.effortEstimate,
+        duplicateRisk: recommendation.duplicateRisk,
+        recommendedAction: recommendation.recommendedAction,
+        recommendedTargetTicket: recommendation.recommendedTargetTicket,
+        matchedPastTickets: recommendation.matchedPastTickets,
+      })),
+    };
+
+    return [
+      'You are rewriting triage reasoning for an internal issue decision engine.',
+      'Do not change the decisions themselves.',
+      'Do not change priority, owner, effort, duplicate risk, action, or target ticket.',
+      'Only produce new explanation arrays.',
+      'Use concrete details from the raw report and matched tickets.',
+      'Avoid generic phrasing such as "aligns with", "provides additional context", "historical matching found", or "appears affected".',
+      'Each reasoning array should contain 2 to 4 concise bullets.',
+      'The wording should feel case-specific, not templated.',
+      'If a matched ticket exists, mention the exact ticket title and status in the action reasoning.',
+      'If the report mentions a concrete symptom like "iOS", "internal server error", "login", "checkout", or "save button", use that symptom directly.',
+      'Owner reasoning should mention the selected owner by name and explain why their role/skills fit this exact issue.',
+      'Priority reasoning should mention the specific blocked flow or user impact from the report.',
+      'Effort reasoning should mention the likely subsystem or debugging scope, not just the size label.',
+      'Return strict JSON with this shape only:',
+      '{"rewrites":[{"reportIndex":0,"priorityReasoning":["..."],"ownerReasoning":["..."],"effortReasoning":["..."],"recommendedActionReasoning":["..."]}]}',
+      'Context:',
+      JSON.stringify(context),
+    ].join('\n');
+  }
+
+  private parseReasoningRewriteResponse(
+    response: string,
+  ): TriageReasoningRewriteResponse {
+    const cleanResponse = response
+      .trim()
+      .replace(/```json/gi, '')
+      .replace(/```/g, '');
+
+    const extracted = this.extractJsonObject(cleanResponse) ?? cleanResponse;
+    let parsed: any;
+    try {
+      parsed = JSON.parse(extracted);
+    } catch (error) {
+      throw new Error('Invalid AI response format: expected triage reasoning JSON');
+    }
+
+    if (!parsed || !Array.isArray(parsed.rewrites)) {
+      throw new Error('Invalid AI response format: rewrites array missing');
+    }
+
+    return {
+      rewrites: parsed.rewrites
+        .filter((item: any) => Number.isInteger(item?.reportIndex))
+        .map((item: any) => ({
+          reportIndex: item.reportIndex,
+          priorityReasoning: this.normalizeReasoningArray(item.priorityReasoning),
+          ownerReasoning: this.normalizeReasoningArray(item.ownerReasoning),
+          effortReasoning: this.normalizeReasoningArray(item.effortReasoning),
+          recommendedActionReasoning: this.normalizeReasoningArray(
+            item.recommendedActionReasoning,
+          ),
+        })),
+    };
+  }
+
+  private applyReasoningRewrites(
+    recommendations: TicketTriageRecommendation[],
+    rewrites: TriageReasoningRewrite[],
+  ) {
+    const rewriteMap = new Map(rewrites.map((rewrite) => [rewrite.reportIndex, rewrite]));
+
+    return recommendations.map((recommendation, index) => {
+      const rewrite = rewriteMap.get(index);
+      if (!rewrite) {
+        return recommendation;
+      }
+
+      return {
+        ...recommendation,
+        priorityReasoning:
+          rewrite.priorityReasoning?.length
+            ? this.uniqueReasons(rewrite.priorityReasoning)
+            : recommendation.priorityReasoning,
+        ownerReasoning:
+          rewrite.ownerReasoning?.length
+            ? this.uniqueReasons(rewrite.ownerReasoning)
+            : recommendation.ownerReasoning,
+        effortReasoning:
+          rewrite.effortReasoning?.length
+            ? this.uniqueReasons(rewrite.effortReasoning)
+            : recommendation.effortReasoning,
+        recommendedActionReasoning:
+          rewrite.recommendedActionReasoning?.length
+            ? this.uniqueReasons(rewrite.recommendedActionReasoning)
+            : recommendation.recommendedActionReasoning,
+      };
+    });
+  }
+
+  private normalizeReasoningArray(input: unknown): string[] | undefined {
+    if (!Array.isArray(input)) {
+      return undefined;
+    }
+
+    const normalized = input
+      .filter((value) => typeof value === 'string')
+      .map((value: string) => value.trim())
+      .filter(Boolean)
+      .slice(0, 4);
+
+    return normalized.length ? normalized : undefined;
+  }
+
+  private extractJsonObject(input: string) {
+    const start = input.indexOf('{');
+    const end = input.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) {
+      return null;
+    }
+    return input.slice(start, end + 1);
+  }
+
+  private async resolvePastTickets(
+    input: AnalyzeTicketTriageDto,
+    organizationId?: string,
+  ): Promise<NonNullable<AnalyzeTicketTriageDto['pastTickets']>> {
+    if (input.pastTickets?.length) {
+      return input.pastTickets;
+    }
+
+    if (!organizationId) {
+      return [];
+    }
+
+    const tickets = await this.ticketRepository.find({
+      where: { organizationId },
+      order: { updatedAt: 'DESC' },
+      take: 25,
+      relations: ['assignedTo'],
+    });
+
+    return tickets.map((ticket) => ({
+      id: String(ticket.id),
+      title: ticket.title,
+      description: ticket.description,
+      priority: ticket.priority,
+      status: ticket.status,
+      ownerHint:
+        ticket.assignedTo?.email ||
+        [
+          ticket.assignedTo?.firstName,
+          ticket.assignedTo?.lastName,
+        ]
+          .filter(Boolean)
+          .join(' ') ||
+        undefined,
+    }));
   }
 }

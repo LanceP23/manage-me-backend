@@ -2,6 +2,7 @@ import { Type, Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  IsIn,
   IsArray,
   IsOptional,
   IsString,
@@ -100,4 +101,9 @@ export class AnalyzeTicketTriageDto {
   @ValidateNested()
   @Type(() => TriageContextDto)
   context?: TriageContextDto;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['heuristic', 'hybrid'])
+  mode?: 'heuristic' | 'hybrid';
 }

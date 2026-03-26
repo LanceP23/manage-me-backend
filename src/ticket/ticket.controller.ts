@@ -230,7 +230,7 @@ export class TicketController {
     const quantity = analyzeTicketTriageDto.rawReports?.length || 1;
     await this.usageService.assertWithinLimit(orgId, 'triage_analysis', quantity);
 
-    const result = this.ticketTriageService.analyze(
+    const result = await this.ticketTriageService.analyze(
       analyzeTicketTriageDto,
       orgId,
     );
@@ -240,6 +240,7 @@ export class TicketController {
       kind: 'triage_analysis',
       quantity,
       metadata: {
+        mode: analyzeTicketTriageDto.mode || 'hybrid',
         pastTicketCount: analyzeTicketTriageDto.pastTickets?.length || 0,
         candidateOwnerCount:
           analyzeTicketTriageDto.candidateOwners?.length || 0,

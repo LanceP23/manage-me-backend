@@ -23,6 +23,31 @@ const seedFirstName = getEnv('SEED_ADMIN_FIRST_NAME', 'Admin') as string;
 const seedLastName = getEnv('SEED_ADMIN_LAST_NAME', 'User') as string;
 const seedOrgName = getEnv('SEED_ORG_NAME', 'Default Org') as string;
 const seedOrgSlug = getEnv('SEED_ORG_SLUG', 'default-org') as string;
+const seedSpecialists = getEnv('SEED_SPECIALISTS', 'true') === 'true';
+
+const specialistUsers = [
+  {
+    firstName: 'Bea',
+    lastName: 'Backend',
+    email: 'backend@example.com',
+    password: 'password123',
+    role: 'member',
+  },
+  {
+    firstName: 'Fiona',
+    lastName: 'Frontend',
+    email: 'frontend@example.com',
+    password: 'password123',
+    role: 'member',
+  },
+  {
+    firstName: 'Mika',
+    lastName: 'Mobile',
+    email: 'mobile@example.com',
+    password: 'password123',
+    role: 'member',
+  },
+] as const;
 
 const start = async () => {
   await dataSource.initialize();
@@ -71,9 +96,48 @@ const start = async () => {
       await memberRepo.save(member);
     }
 
+    if (seedSpecialists) {
+      for (const specialist of specialistUsers) {
+        let specialistUser = await userRepo.findOne({
+          where: { email: specialist.email },
+        });
+
+        if (!specialistUser) {
+          specialistUser = userRepo.create({
+            firstName: specialist.firstName,
+            lastName: specialist.lastName,
+            email: specialist.email,
+            password: specialist.password,
+            isActive: true,
+          });
+          specialistUser = await userRepo.save(specialistUser);
+        }
+
+        const existingSpecialistMember = await memberRepo.findOne({
+          where: {
+            organization: { id: organization.id },
+            user: { id: specialistUser.id },
+          },
+          relations: ['organization', 'user'],
+        });
+
+        if (!existingSpecialistMember) {
+          const member = memberRepo.create({
+            organization,
+            user: specialistUser,
+            role: specialist.role,
+          });
+          await memberRepo.save(member);
+        }
+      }
+    }
+
     console.log('Seed complete');
     console.log(`Admin email: ${seedAdminEmail}`);
     console.log(`Org slug: ${seedOrgSlug}`);
+    if (seedSpecialists) {
+      console.log('Specialists: backend@example.com, frontend@example.com, mobile@example.com');
+    }
   } finally {
     await dataSource.destroy();
   }

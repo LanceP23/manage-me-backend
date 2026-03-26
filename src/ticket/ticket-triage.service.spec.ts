@@ -2,13 +2,36 @@ import { TicketTriageService } from './ticket-triage.service';
 
 describe('TicketTriageService', () => {
   let service: TicketTriageService;
+  let ticketRepository: { find: jest.Mock };
+  let aiProviderService: { getProvider: jest.Mock };
+  let aiEvaluationLogService: { logSuccess: jest.Mock; logFailure: jest.Mock };
+  let aiAgent: { providerName: string; context: string; generateResponse: jest.Mock };
 
   beforeEach(() => {
-    service = new TicketTriageService();
+    ticketRepository = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+    aiAgent = {
+      providerName: 'test-provider',
+      context: 'test-context',
+      generateResponse: jest.fn(),
+    };
+    aiProviderService = {
+      getProvider: jest.fn().mockReturnValue(aiAgent),
+    };
+    aiEvaluationLogService = {
+      logSuccess: jest.fn().mockResolvedValue(undefined),
+      logFailure: jest.fn().mockResolvedValue(undefined),
+    };
+    service = new TicketTriageService(
+      ticketRepository as any,
+      aiProviderService as any,
+      aiEvaluationLogService as any,
+    );
   });
 
-  it('marks a production checkout failure as high priority with a backend owner suggestion', () => {
-    const result = service.analyze({
+  it('marks a production checkout failure as high priority with a backend owner suggestion', async () => {
+    const result = await service.analyze({
       rawReports: [
         'Customers cannot complete checkout in production because payment fails after card entry.',
       ],
@@ -53,8 +76,8 @@ describe('TicketTriageService', () => {
     expect(result.recommendations[0].duplicateRisk).toBe('high');
   });
 
-  it('keeps cosmetic reports low priority and small effort', () => {
-    const result = service.analyze({
+  it('keeps cosmetic reports low priority and small effort', async () => {
+    const result = await service.analyze({
       rawReports: ['There is a typo in the dashboard header text on the profile page.'],
       candidateOwners: [
         {
@@ -72,8 +95,8 @@ describe('TicketTriageService', () => {
     expect(result.recommendations[0].recommendedAction).toBe('create_draft');
   });
 
-  it('recommends merging when a strong matching ticket is already in progress', () => {
-    const result = service.analyze({
+  it('recommends merging when a strong matching ticket is already in progress', async () => {
+    const result = await service.analyze({
       rawReports: ['Login is failing again in production with the same internal server error for multiple users.'],
       pastTickets: [
         {
@@ -106,5 +129,127 @@ describe('TicketTriageService', () => {
       title: 'Login not working',
       status: 'in_progress',
     });
+  });
+
+  it('uses recent org tickets automatically when request history is omitted', async () => {
+    ticketRepository.find.mockResolvedValue([
+      {
+        id: 44,
+        title: 'Login not working',
+        description: 'login gives error message internal server error.',
+        priority: 'high',
+        status: 'in_progress',
+        assignedTo: null,
+      },
+    ]);
+
+    const result = await service.analyze(
+      {
+        rawReports: ['Login is failing again in production with the same internal server error for multiple users.'],
+        candidateOwners: [
+          {
+            id: 'user-1',
+            name: 'Alice',
+            role: 'backend',
+            skills: ['auth', 'api'],
+          },
+        ],
+        context: {
+          productArea: 'authentication',
+          environment: 'production',
+        },
+      },
+      'org-1',
+    );
+
+    expect(ticketRepository.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: 'org-1' },
+        take: 25,
+      }),
+    );
+    expect(result.recommendations[0].matchedPastTickets[0]?.id).toBe('44');
+  });
+
+  it('rewrites reasoning in hybrid mode when the AI provider succeeds', async () => {
+    aiAgent.generateResponse.mockResolvedValue(
+      JSON.stringify({
+        rewrites: [
+          {
+            reportIndex: 0,
+            priorityReasoning: [
+              'Login failures in production block account access for active users.',
+            ],
+            ownerReasoning: [
+              'The issue points to authentication and backend handling, which aligns with Alice.',
+            ],
+            effortReasoning: [
+              'This likely needs backend debugging across auth flow and production behavior.',
+            ],
+            recommendedActionReasoning: [
+              'The wording and production symptoms closely match the in-progress login incident.',
+            ],
+          },
+        ],
+      }),
+    );
+
+    const result = await service.analyze({
+      mode: 'hybrid',
+      rawReports: ['Login is failing again in production with the same internal server error for multiple users.'],
+      pastTickets: [
+        {
+          id: '44',
+          title: 'Login not working',
+          description: 'login gives error message internal server error.',
+          priority: 'high',
+          status: 'in_progress',
+          ownerHint: 'backend',
+        },
+      ],
+      candidateOwners: [
+        {
+          id: 'user-1',
+          name: 'Alice',
+          role: 'backend',
+          skills: ['auth', 'api'],
+        },
+      ],
+      context: {
+        productArea: 'authentication',
+        environment: 'production',
+      },
+    });
+
+    expect(result.summary.mode).toBe('hybrid');
+    expect(result.summary.reasoningSource).toBe('llm_rewritten');
+    expect(result.recommendations[0].priorityReasoning[0]).toContain(
+      'block account access',
+    );
+    expect(aiEvaluationLogService.logSuccess).toHaveBeenCalled();
+  });
+
+  it('falls back to heuristic reasoning in hybrid mode if the AI rewrite fails', async () => {
+    aiAgent.generateResponse.mockRejectedValue(new Error('provider unavailable'));
+
+    const result = await service.analyze({
+      mode: 'hybrid',
+      rawReports: ['There is a typo in the dashboard header text on the profile page.'],
+      candidateOwners: [
+        {
+          id: 'user-2',
+          name: 'Mark',
+          role: 'frontend',
+          skills: ['ui', 'copy'],
+        },
+      ],
+    });
+
+    expect(result.summary.mode).toBe('hybrid');
+    expect(result.summary.reasoningSource).toBe('heuristic_fallback');
+    expect(result.recommendations[0].priorityReasoning[0]).toContain(
+      'cosmetic or content-related',
+    );
+    expect(aiEvaluationLogService.logFailure).toHaveBeenCalled();
   });
 });

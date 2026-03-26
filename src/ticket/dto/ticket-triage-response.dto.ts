@@ -50,6 +50,8 @@ export type TicketTriageAnalysisResponseDto = {
   summary: {
     reportCount: number;
     highestPriority: TriagePriority;
+    mode: 'heuristic' | 'hybrid';
+    reasoningSource: 'heuristic' | 'llm_rewritten' | 'heuristic_fallback';
   };
   recommendations: TicketTriageRecommendation[];
 };
