@@ -54,6 +54,9 @@ export class TicketDraft {
   @Column({ type: 'varchar', length: 64, nullable: true })
   rawInputHash: string | null;
 
+  @Column({ type: 'jsonb', nullable: true })
+  decisionSnapshot: Record<string, unknown> | null;
+
   @Column({ type: 'int', nullable: true })
   approvedTicketId: number | null;
 

@@ -22,6 +22,7 @@ const KIND_TO_FIELD: Record<UsageEventKind, UsageLimitKey> = {
   agent_action: 'agentActions',
   commit_link: 'commitLinks',
   integration_draft: 'integrationDrafts',
+  triage_analysis: 'triageAnalyses',
 };
 
 @Injectable()
@@ -121,6 +122,7 @@ export class UsageService {
         agentActions: monthly?.agentActions ?? 0,
         commitLinks: monthly?.commitLinks ?? 0,
         integrationDrafts: monthly?.integrationDrafts ?? 0,
+        triageAnalyses: monthly?.triageAnalyses ?? 0,
       },
       limits,
     };

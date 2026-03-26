@@ -20,6 +20,7 @@ import { TicketIngestService } from './ticket-ingest.service';
 import { OrganizationModule } from '../organization/organization.module';
 import { UsageModule } from '../usage/usage.module';
 import { AgentModule } from '../agent/agent.module';
+import { TicketTriageService } from './ticket-triage.service';
 
 @Module({
   imports: [
@@ -46,12 +47,14 @@ import { AgentModule } from '../agent/agent.module';
     TicketDraftService,
     TicketCommitLinkService,
     TicketIngestService,
+    TicketTriageService,
   ],
   exports: [
     TicketDraftService,
     AiTicketService,
     TicketCommitLinkService,
     TicketService,
+    TicketTriageService,
   ],
 })
 export class TicketModule {}

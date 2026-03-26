@@ -1,4 +1,11 @@
-import { IsNotEmpty, IsOptional, IsString, IsEnum, IsInt } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsEnum,
+  IsInt,
+  IsObject,
+} from 'class-validator';
 import { TicketSourceValues } from './ai-ticket-draft.dto';
 
 export class GenerateTicketDraftsDto {
@@ -25,4 +32,8 @@ export class GenerateTicketDraftsDto {
   @IsOptional()
   @IsInt()
   maxDrafts?: number;
+
+  @IsOptional()
+  @IsObject()
+  decisionSnapshot?: Record<string, unknown>;
 }

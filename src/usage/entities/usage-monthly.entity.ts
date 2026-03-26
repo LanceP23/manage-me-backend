@@ -34,6 +34,9 @@ export class UsageMonthly {
   @Column({ type: 'int', default: 0 })
   integrationDrafts: number;
 
+  @Column({ type: 'int', default: 0 })
+  triageAnalyses: number;
+
   @CreateDateColumn()
   createdAt: Date;
 

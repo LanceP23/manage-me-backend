@@ -9,7 +9,8 @@ export type UsageLimitKey =
   | 'ticketDrafts'
   | 'agentActions'
   | 'commitLinks'
-  | 'integrationDrafts';
+  | 'integrationDrafts'
+  | 'triageAnalyses';
 
 export const DEFAULT_USAGE_LIMITS: Record<
   string,
@@ -21,6 +22,7 @@ export const DEFAULT_USAGE_LIMITS: Record<
     agentActions: 50,
     commitLinks: 200,
     integrationDrafts: 200,
+    triageAnalyses: 100,
   },
   [USAGE_PLAN_SLUGS.PRO]: {
     aiPrompts: 2000,
@@ -28,6 +30,7 @@ export const DEFAULT_USAGE_LIMITS: Record<
     agentActions: 500,
     commitLinks: 2000,
     integrationDrafts: 2000,
+    triageAnalyses: 1000,
   },
   [USAGE_PLAN_SLUGS.ENTERPRISE]: {
     aiPrompts: 0,
@@ -35,5 +38,6 @@ export const DEFAULT_USAGE_LIMITS: Record<
     agentActions: 0,
     commitLinks: 0,
     integrationDrafts: 0,
+    triageAnalyses: 0,
   },
 };

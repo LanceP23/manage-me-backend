@@ -19,10 +19,12 @@ import { ApproveTicketDraftDto } from './dto/approve-ticket-draft.dto';
 import { LinkCommitDto } from './dto/link-commit.dto';
 import { SaveCommitLinkDto } from './dto/save-commit-link.dto';
 import { RejectTicketDraftDto } from './dto/reject-ticket-draft.dto';
+import { MergeTicketDraftDto } from './dto/merge-ticket-draft.dto';
 import { IngestChatDto } from './dto/ingest-chat.dto';
 import { IngestWebDto } from './dto/ingest-web.dto';
 import { AutoLinkCommitDto } from './dto/auto-link-commit.dto';
 import { EscalateSlaDto } from './dto/escalate-sla.dto';
+import { AnalyzeTicketTriageDto } from './dto/analyze-ticket-triage.dto';
 import { AiTicketService } from './ai-ticket.service';
 import { TicketDraftService } from './ticket-draft.service';
 import { TicketCommitLinkService } from './ticket-commit-link.service';
@@ -31,6 +33,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OrgGuard } from '../organization/guards/org.guard';
 import { UsageService } from '../usage/usage.service';
+import { TicketTriageService } from './ticket-triage.service';
 
 @Controller('tickets')
 @UseGuards(JwtAuthGuard, OrgGuard)
@@ -41,6 +44,7 @@ export class TicketController {
     private readonly ticketDraftService: TicketDraftService,
     private readonly ticketCommitLinkService: TicketCommitLinkService,
     private readonly ticketIngestService: TicketIngestService,
+    private readonly ticketTriageService: TicketTriageService,
     private readonly configService: ConfigService,
     private readonly usageService: UsageService,
   ) {}
@@ -69,7 +73,14 @@ export class TicketController {
       generateTicketDraftsDto,
       orgId,
     );
-    const created = await this.ticketDraftService.createDrafts(drafts, orgId);
+    const draftsWithDecisionContext = drafts.map((draft) => ({
+      ...draft,
+      decisionSnapshot: generateTicketDraftsDto.decisionSnapshot,
+    }));
+    const created = await this.ticketDraftService.createDrafts(
+      draftsWithDecisionContext,
+      orgId,
+    );
 
     await this.usageService.recordEvent({
       organizationId: orgId,
@@ -144,6 +155,14 @@ export class TicketController {
     return this.ticketDraftService.findAllDraftsByOrg(orgId);
   }
 
+  @Get('drafts/:id')
+  findDraftById(
+    @Param('id', ParseIntPipe) id: number,
+    @Headers('x-org-id') orgId: string,
+  ) {
+    return this.ticketDraftService.findDraftById(id, orgId);
+  }
+
   @Get('drafts/:id/audit')
   listDraftAudit(
     @Param('id', ParseIntPipe) id: number,
@@ -170,6 +189,19 @@ export class TicketController {
     return this.ticketDraftService.rejectDraft(id, rejectTicketDraftDto, orgId);
   }
 
+  @Post('drafts/:id/merge-existing')
+  mergeDraftIntoExisting(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() mergeTicketDraftDto: MergeTicketDraftDto,
+    @Headers('x-org-id') orgId: string,
+  ) {
+    return this.ticketDraftService.mergeIntoExistingTicket(
+      id,
+      mergeTicketDraftDto,
+      orgId,
+    );
+  }
+
   @Post('link-commit')
   async linkCommit(
     @Body() linkCommitDto: LinkCommitDto,
@@ -188,6 +220,33 @@ export class TicketController {
     });
 
     return decision;
+  }
+
+  @Post('triage/analyze')
+  async analyzeTriage(
+    @Body() analyzeTicketTriageDto: AnalyzeTicketTriageDto,
+    @Headers('x-org-id') orgId: string,
+  ) {
+    const quantity = analyzeTicketTriageDto.rawReports?.length || 1;
+    await this.usageService.assertWithinLimit(orgId, 'triage_analysis', quantity);
+
+    const result = this.ticketTriageService.analyze(
+      analyzeTicketTriageDto,
+      orgId,
+    );
+
+    await this.usageService.recordEvent({
+      organizationId: orgId,
+      kind: 'triage_analysis',
+      quantity,
+      metadata: {
+        pastTicketCount: analyzeTicketTriageDto.pastTickets?.length || 0,
+        candidateOwnerCount:
+          analyzeTicketTriageDto.candidateOwners?.length || 0,
+      },
+    });
+
+    return result;
   }
 
   @Post('sla/escalate')

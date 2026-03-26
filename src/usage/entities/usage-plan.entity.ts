@@ -29,6 +29,7 @@ export class UsagePlan {
     agentActions?: number;
     commitLinks?: number;
     integrationDrafts?: number;
+    triageAnalyses?: number;
   };
 
   @CreateDateColumn()

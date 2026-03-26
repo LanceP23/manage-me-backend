@@ -11,7 +11,8 @@ export type UsageEventKind =
   | 'ticket_draft'
   | 'agent_action'
   | 'commit_link'
-  | 'integration_draft';
+  | 'integration_draft'
+  | 'triage_analysis';
 
 @Entity()
 @Index(['organizationId', 'kind', 'createdAt'])
@@ -27,7 +28,14 @@ export class UsageEvent {
 
   @Column({
     type: 'enum',
-    enum: ['ai_prompt', 'ticket_draft', 'agent_action', 'commit_link', 'integration_draft'],
+    enum: [
+      'ai_prompt',
+      'ticket_draft',
+      'agent_action',
+      'commit_link',
+      'integration_draft',
+      'triage_analysis',
+    ],
   })
   kind: UsageEventKind;
 

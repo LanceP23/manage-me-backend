@@ -8,6 +8,7 @@ import { Product } from '../product/entities/Product.entity';
 import { AiTicketDraftDto } from './dto/ai-ticket-draft.dto';
 import { ApproveTicketDraftDto } from './dto/approve-ticket-draft.dto';
 import { RejectTicketDraftDto } from './dto/reject-ticket-draft.dto';
+import { MergeTicketDraftDto } from './dto/merge-ticket-draft.dto';
 import { TicketDraftApprovalAudit } from './entities/ticket-draft-approval-audit.entity';
 import { ConfigService } from '@nestjs/config';
 import { Organization } from '../organization/entities/organization.entity';
@@ -69,6 +70,7 @@ export class TicketDraftService {
       entity.aiProvider = draft.aiProvider || null;
       entity.confidence = draft.confidence ?? null;
       entity.rawInputHash = draft.rawInputHash || null;
+      entity.decisionSnapshot = draft.decisionSnapshot ?? null;
 
       if (draft.productId !== undefined) {
         const product = await this.productRepository.findOne({
@@ -142,12 +144,27 @@ export class TicketDraftService {
   }
 
   async findAllDraftsByOrg(organizationId?: string) {
-    const where = organizationId ? { organizationId } : {};
+    const where = organizationId
+      ? { organizationId, approvalStatus: 'draft' }
+      : { approvalStatus: 'draft' };
     return this.draftRepository.find({
       where,
       relations: ['assignedTo', 'product'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async findDraftById(id: number, organizationId?: string) {
+    const draft = await this.draftRepository.findOne({
+      where: organizationId ? { id, organizationId } : { id },
+      relations: ['assignedTo', 'product', 'approvedBy', 'rejectedBy'],
+    });
+
+    if (!draft) {
+      throw new NotFoundException(`Ticket draft with ID ${id} not found`);
+    }
+
+    return draft;
   }
 
   async approveDraft(
@@ -227,6 +244,74 @@ export class TicketDraftService {
       metadata: null,
     });
     return saved;
+  }
+
+  async mergeIntoExistingTicket(
+    id: number,
+    input: MergeTicketDraftDto,
+    organizationId?: string,
+  ) {
+    const draft = await this.draftRepository.findOne({
+      where: organizationId ? { id, organizationId } : { id },
+    });
+    if (!draft) {
+      throw new NotFoundException(`Ticket draft with ID ${id} not found`);
+    }
+    if (draft.approvalStatus !== 'draft') {
+      throw new BadRequestException(
+        `Ticket draft with ID ${id} is already ${draft.approvalStatus}`,
+      );
+    }
+
+    const targetTicket = await this.ticketRepository.findOne({
+      where: organizationId
+        ? { id: input.targetTicketId, organizationId }
+        : { id: input.targetTicketId },
+      relations: ['assignedTo', 'product'],
+    });
+    if (!targetTicket) {
+      throw new NotFoundException(
+        `Target ticket with ID ${input.targetTicketId} not found`,
+      );
+    }
+
+    draft.approvalStatus = 'rejected';
+    draft.rejectedAt = new Date();
+
+    let actor: User | null = null;
+    if (input.mergedById) {
+      const merger = await this.userRepository.findOne({
+        where: { id: input.mergedById },
+      });
+      if (!merger) {
+        throw new NotFoundException(
+          `User with ID ${input.mergedById} not found`,
+        );
+      }
+      draft.rejectedBy = merger;
+      actor = merger;
+    } else {
+      draft.rejectedBy = null;
+    }
+
+    const savedDraft = await this.draftRepository.save(draft);
+    await this.auditRepository.save({
+      action: 'rejected',
+      draft: savedDraft,
+      approvedTicket: targetTicket,
+      actor,
+      overrides: null,
+      metadata: {
+        resolution: 'merged_existing',
+        targetTicketId: targetTicket.id,
+        targetTicketTitle: targetTicket.title,
+      },
+    });
+
+    return {
+      draft: savedDraft,
+      mergedIntoTicket: targetTicket,
+    };
   }
 
   async listDraftAudit(draftId: number, organizationId?: string) {

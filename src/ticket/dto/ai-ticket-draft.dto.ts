@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsString,
   IsNumber,
+  IsObject,
   Min,
   Max,
   IsInt,
@@ -54,6 +55,10 @@ export class AiTicketDraftDto {
   @IsOptional()
   @IsString()
   rawInputHash?: string;
+
+  @IsOptional()
+  @IsObject()
+  decisionSnapshot?: Record<string, unknown>;
 
   @IsOptional()
   @IsInt()
