@@ -8,11 +8,13 @@ import { ProductQuestion } from 'src/product-question/entities/product-question.
 import { User } from 'src/users/entities/user.entity';
 import { OrganizationModule } from '../organization/organization.module';
 import { AdminGuard } from '../auth/guards/admin.guard';
+import { KnowledgeModule } from '../knowledge/knowledge.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Answer, ProductContext, ProductQuestion, User]),
     OrganizationModule,
+    KnowledgeModule,
   ],
   providers: [AnswerService, AdminGuard],
   controllers: [AnswerController],

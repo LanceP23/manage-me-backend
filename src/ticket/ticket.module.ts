@@ -21,6 +21,7 @@ import { OrganizationModule } from '../organization/organization.module';
 import { UsageModule } from '../usage/usage.module';
 import { AgentModule } from '../agent/agent.module';
 import { TicketTriageService } from './ticket-triage.service';
+import { KnowledgeModule } from '../knowledge/knowledge.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { TicketTriageService } from './ticket-triage.service';
     AiEvaluationModule,
     OrganizationModule,
     UsageModule,
+    KnowledgeModule,
     forwardRef(() => AgentModule),
   ],
   controllers: [TicketController],

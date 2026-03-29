@@ -18,6 +18,7 @@ import { IntegrationsModule } from './integrations/integrations.module';
 import { OrganizationModule } from './organization/organization.module';
 import { AgentModule } from './agent/agent.module';
 import { UsageModule } from './usage/usage.module';
+import { KnowledgeModule } from './knowledge/knowledge.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { UsageModule } from './usage/usage.module';
     OrganizationModule,
     AgentModule,
     UsageModule,
+    KnowledgeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

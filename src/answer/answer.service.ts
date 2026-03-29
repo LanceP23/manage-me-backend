@@ -7,6 +7,7 @@ import { UpdateAnswerDto } from './dto/update-answer.dto';
 import { ProductContext } from 'src/product-context/entities/ProductContext.entity';
 import { ProductQuestion } from 'src/product-question/entities/product-question.entity';
 import { User } from 'src/users/entities/user.entity';
+import { KnowledgeService } from '../knowledge/knowledge.service';
 
 @Injectable()
 export class AnswerService {
@@ -19,6 +20,7 @@ export class AnswerService {
     private productQuestionRepository: Repository<ProductQuestion>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private readonly knowledgeService: KnowledgeService,
   ) {}
 
   async create(createAnswerDto: CreateAnswerDto): Promise<Answer> {
@@ -68,7 +70,9 @@ export class AnswerService {
       user,
     });
 
-    return await this.answerRepository.save(answer);
+    const savedAnswer = await this.answerRepository.save(answer);
+    await this.knowledgeService.indexAnswerById(savedAnswer.id);
+    return savedAnswer;
   }
 
   async findAll(): Promise<Answer[]> {
@@ -80,7 +84,7 @@ export class AnswerService {
   async findOne(id: number): Promise<Answer | null> {
     return this.answerRepository.findOne({
       where: { id },
-      relations: ['productContext', 'productQuestion', 'user'],
+      relations: ['productContext', 'productContext.product', 'productQuestion', 'user'],
     });
   }
 
@@ -97,6 +101,7 @@ export class AnswerService {
         `Answer with ID ${id} not found after update`,
       );
     }
+    await this.knowledgeService.indexAnswerById(updatedAnswer.id);
     return updatedAnswer;
   }
 
@@ -106,6 +111,10 @@ export class AnswerService {
       throw new NotFoundException(`Answer with ID ${id} not found`);
     }
 
+    await this.knowledgeService.removeAnswerById(
+      answer.id,
+      answer.productContext?.product?.organizationId ?? undefined,
+    );
     await this.answerRepository.delete(id);
   }
 }

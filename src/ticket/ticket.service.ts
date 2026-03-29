@@ -9,6 +9,7 @@ import { Product } from '../product/entities/Product.entity';
 import { ConfigService } from '@nestjs/config';
 import { EscalateSlaDto } from './dto/escalate-sla.dto';
 import { Organization } from '../organization/entities/organization.entity';
+import { KnowledgeService } from '../knowledge/knowledge.service';
 
 @Injectable()
 export class TicketService {
@@ -22,6 +23,7 @@ export class TicketService {
     private readonly configService: ConfigService,
     @InjectRepository(Organization)
     private organizationRepository: Repository<Organization>,
+    private readonly knowledgeService: KnowledgeService,
   ) {}
 
   async create(createTicketDto: CreateTicketDto, organizationId?: string) {
@@ -64,7 +66,9 @@ export class TicketService {
       }
     }
 
-    return await this.ticketRepository.save(ticket);
+    const savedTicket = await this.ticketRepository.save(ticket);
+    await this.knowledgeService.indexTicketById(savedTicket.id, organizationId);
+    return savedTicket;
   }
 
   async findAll(organizationId?: string) {
@@ -144,7 +148,9 @@ export class TicketService {
       }
     }
 
-    return await this.ticketRepository.save(ticket);
+    const savedTicket = await this.ticketRepository.save(ticket);
+    await this.knowledgeService.indexTicketById(savedTicket.id, organizationId);
+    return savedTicket;
   }
 
   async remove(id: number, organizationId?: string) {
@@ -154,6 +160,7 @@ export class TicketService {
     if (!ticket) {
       throw new NotFoundException(`Ticket with ID ${id} not found`);
     }
+    await this.knowledgeService.removeTicketById(ticket.id, ticket.organizationId || organizationId);
     return await this.ticketRepository.remove(ticket);
   }
 
