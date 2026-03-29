@@ -167,7 +167,7 @@ export class KnowledgeService {
 
     const queryBuilder = this.knowledgeChunkRepository
       .createQueryBuilder(chunkAlias)
-      .innerJoinAndSelect(`${chunkAlias}.document`, documentAlias)
+      .innerJoin(`${chunkAlias}.document`, documentAlias)
       .where(`${chunkAlias}.organizationId = :organizationId`, { organizationId });
 
     if (input.productId) {
@@ -184,30 +184,53 @@ export class KnowledgeService {
     }
 
     queryBuilder
+      .select([
+        `${chunkAlias}.id AS "chunkId"`,
+        `${chunkAlias}.documentId AS "documentId"`,
+        `${documentAlias}.title AS "title"`,
+        `${documentAlias}.sourceType AS "sourceType"`,
+        `${documentAlias}.sourceKey AS "sourceKey"`,
+        `${chunkAlias}.productId AS "productId"`,
+        `${chunkAlias}.content AS "content"`,
+        `${chunkAlias}.metadata AS "metadata"`,
+      ])
       .addSelect(
         `ts_rank_cd(to_tsvector('simple', ${chunkAlias}.content), plainto_tsquery('simple', :query))`,
-        'rank',
+        'score',
       )
       .andWhere(
         `to_tsvector('simple', ${chunkAlias}.content) @@ plainto_tsquery('simple', :query)`,
         { query },
       )
-      .orderBy('rank', 'DESC')
+      .orderBy('score', 'DESC')
       .addOrderBy(`${chunkAlias}.id`, 'ASC')
       .limit(limit);
 
-    const rows = await queryBuilder.getRawAndEntities();
+    const rows = await queryBuilder.getRawMany<{
+      chunkId: number;
+      documentId: number;
+      title: string;
+      sourceType: string;
+      sourceKey: string;
+      productId: number | null;
+      score: string | number;
+      content: string;
+      metadata: Record<string, unknown> | string | null;
+    }>();
 
-    const results = rows.entities.map((chunk, index) => ({
-      chunkId: chunk.id,
-      documentId: chunk.documentId,
-      title: chunk.document.title,
-      sourceType: chunk.document.sourceType,
-      sourceKey: chunk.document.sourceKey,
-      productId: chunk.productId,
-      score: Number(rows.raw[index]?.rank || 0),
-      content: chunk.content,
-      metadata: chunk.metadata,
+    const results = rows.map((row) => ({
+      chunkId: Number(row.chunkId),
+      documentId: Number(row.documentId),
+      title: row.title,
+      sourceType: row.sourceType,
+      sourceKey: row.sourceKey,
+      productId: row.productId === null ? null : Number(row.productId),
+      score: Number(row.score || 0),
+      content: row.content,
+      metadata:
+        typeof row.metadata === 'string'
+          ? (JSON.parse(row.metadata) as Record<string, unknown>)
+          : row.metadata,
     }));
 
     return {
